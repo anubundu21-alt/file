@@ -135,7 +135,7 @@ export default function HomeScreen() {
               <Text style={styles.storageEyebrow}>{deviceStorage?.source === 'browser' ? 'BROWSER STORAGE' : 'IPHONE STORAGE'}</Text>
               <Text style={styles.storageTotal}>
                 {deviceStorage ? formatStorageSize(deviceStorage.total) : '—'}
-                <Text style={styles.storageUnit}>  limit</Text>
+                <Text style={styles.storageUnit}>  capacity</Text>
               </Text>
             </View>
             <View style={styles.storageRing}>
@@ -152,11 +152,11 @@ export default function HomeScreen() {
               <Text style={styles.storageStatValue}>{deviceStorage ? formatStorageSize(deviceStorage.used) : '—'}</Text>
             </View>
             <View style={styles.storageStat}>
-              <Text style={styles.storageStatLabel}>Free</Text>
+              <Text style={styles.storageStatLabel}>Available</Text>
               <Text style={styles.storageStatValue}>{deviceStorage ? formatStorageSize(deviceStorage.free) : '—'}</Text>
             </View>
             <View style={styles.storageStat}>
-              <Text style={styles.storageStatLabel}>Limit</Text>
+              <Text style={styles.storageStatLabel}>Capacity</Text>
               <Text style={styles.storageStatValue}>{deviceStorage ? formatStorageSize(deviceStorage.total) : '—'}</Text>
             </View>
           </View>
