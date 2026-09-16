@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -11,11 +11,12 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { categoryMeta, formatFileSize, LibraryItem, useFileManager } from '@/context/FileManagerContext';
+import { categoryMeta, formatFileSize, useFileManager } from '@/context/FileManagerContext';
 import { useColors } from '@/hooks/useColors';
 import { FileGlyph } from '@/components/FileGlyph';
 import { PromptModal } from '@/components/PromptModal';
 import { formatRelativeTime } from '@/lib/filePresentation';
+import { formatStorageSize, readDeviceStorage, type DeviceStorage } from '@/lib/deviceStorage';
 
 type IconName = React.ComponentProps<typeof Feather>['name'];
 
@@ -49,6 +50,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [folderPrompt, setFolderPrompt] = useState(false);
+  const [deviceStorage, setDeviceStorage] = useState<DeviceStorage | null>(null);
 
   const greet = useMemo(() => {
     const hour = new Date().getHours();
@@ -56,13 +58,9 @@ export default function HomeScreen() {
   }, []);
   const activeFiles = files;
   const totalBytes = useMemo(() => activeFiles.reduce((sum, file) => sum + file.size, 0), [activeFiles]);
-  const categoryBreakdown = useMemo(() => {
-    const totals: Partial<Record<LibraryItem['category'], number>> = {};
-    for (const file of activeFiles) totals[file.category] = (totals[file.category] ?? 0) + file.size;
-    return (Object.entries(totals) as [LibraryItem['category'], number][])
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4);
-  }, [activeFiles]);
+  const usedRatio = deviceStorage && deviceStorage.total > 0
+    ? Math.min(1, deviceStorage.used / deviceStorage.total)
+    : 0;
   const recentFiles = useMemo(() => [...activeFiles]
     .sort((a, b) => new Date(b.openedAt ?? b.createdAt).getTime() - new Date(a.openedAt ?? a.createdAt).getTime())
     .slice(0, 4), [activeFiles]);
@@ -90,9 +88,18 @@ export default function HomeScreen() {
     showNotice(`${label} is coming in a later update.`);
   };
 
+  const refreshStorage = async () => {
+    const next = await readDeviceStorage();
+    setDeviceStorage(next);
+  };
+
+  useEffect(() => {
+    void refreshStorage();
+  }, []);
+
   const refresh = async () => {
     setRefreshing(true);
-    await reloadLibrary();
+    await Promise.all([reloadLibrary(), refreshStorage()]);
     setRefreshing(false);
   };
 
@@ -124,25 +131,38 @@ export default function HomeScreen() {
 
         <View style={[styles.storageCard, { backgroundColor: colors.navy }]}>
           <View style={styles.storageHeader}>
-            <View>
-              <Text style={styles.storageEyebrow}>SIFT LIBRARY</Text>
-              <Text style={styles.storageTotal}>{totalBytes ? formatFileSize(totalBytes) : '0 MB'} <Text style={styles.storageUnit}>saved locally</Text></Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.storageEyebrow}>{deviceStorage?.source === 'browser' ? 'BROWSER STORAGE' : 'IPHONE STORAGE'}</Text>
+              <Text style={styles.storageTotal}>
+                {deviceStorage ? formatStorageSize(deviceStorage.total) : '—'}
+                <Text style={styles.storageUnit}>  limit</Text>
+              </Text>
             </View>
             <View style={styles.storageRing}>
-              <Text style={styles.storageRingText}>{activeFiles.length}</Text>
+              <Text style={styles.storageRingText}>{deviceStorage ? `${Math.round(usedRatio * 100)}%` : '—'}</Text>
             </View>
           </View>
           <View style={styles.storageBar}>
-            {categoryBreakdown.length ? categoryBreakdown.map(([category, size]) => (
-              <View
-                key={category}
-                style={[styles.storageBarSegment, { flex: Math.max(size, 1), backgroundColor: categoryMeta[category].color }]}
-              />
-            )) : <View style={[styles.storageBarSegment, { flex: 1, backgroundColor: colors.teal }]} />}
+            <View style={[styles.storageBarSegment, { flex: Math.max(deviceStorage?.used ?? 1, 1), backgroundColor: colors.teal }]} />
+            <View style={[styles.storageBarSegment, { flex: Math.max(deviceStorage?.free ?? 1, 1), backgroundColor: '#385169' }]} />
+          </View>
+          <View style={styles.storageStats}>
+            <View style={styles.storageStat}>
+              <Text style={styles.storageStatLabel}>Used</Text>
+              <Text style={styles.storageStatValue}>{deviceStorage ? formatStorageSize(deviceStorage.used) : '—'}</Text>
+            </View>
+            <View style={styles.storageStat}>
+              <Text style={styles.storageStatLabel}>Free</Text>
+              <Text style={styles.storageStatValue}>{deviceStorage ? formatStorageSize(deviceStorage.free) : '—'}</Text>
+            </View>
+            <View style={styles.storageStat}>
+              <Text style={styles.storageStatLabel}>Limit</Text>
+              <Text style={styles.storageStatValue}>{deviceStorage ? formatStorageSize(deviceStorage.total) : '—'}</Text>
+            </View>
           </View>
           <View style={styles.storageFooter}>
-            <Text style={styles.storageCapacity}>{activeFiles.length} {activeFiles.length === 1 ? 'file' : 'files'} in Sift</Text>
-            <Text style={styles.legendText}>Not full iPhone storage</Text>
+            <Text style={styles.storageCapacity}>Sift is using {totalBytes ? formatFileSize(totalBytes) : '0 B'}</Text>
+            <Text style={styles.legendText}>{activeFiles.length} {activeFiles.length === 1 ? 'file' : 'files'} in Sift</Text>
           </View>
         </View>
 
@@ -253,7 +273,11 @@ const styles = StyleSheet.create({
   storageRingText: { color: '#FFFFFF', fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   storageBar: { height: 10, backgroundColor: '#263F56', borderRadius: 5, marginTop: 22, flexDirection: 'row', overflow: 'hidden', gap: 2 },
   storageBarSegment: { height: '100%', minWidth: 8 },
-  storageFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
+  storageStats: { flexDirection: 'row', marginTop: 16, gap: 10 },
+  storageStat: { flex: 1, gap: 4 },
+  storageStatLabel: { color: '#9DB2A8', fontFamily: 'Inter_500Medium', fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase' },
+  storageStatValue: { color: '#FFFFFF', fontFamily: 'Inter_700Bold', fontSize: 15 },
+  storageFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 },
   storageCapacity: { color: '#9DB2A8', fontFamily: 'Inter_400Regular', fontSize: 12 },
   legendText: { color: '#B6C8BE', fontFamily: 'Inter_500Medium', fontSize: 10 },
   sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 13, marginTop: 2 },

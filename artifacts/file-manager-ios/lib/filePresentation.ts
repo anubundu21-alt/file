@@ -20,6 +20,12 @@ export function isPreviewableImage(item: LibraryItem): boolean {
   return item.kind === 'file' && item.category === 'image';
 }
 
+export function isPdfPreview(item: LibraryItem): boolean {
+  if (item.kind !== 'file') return false;
+  if (item.category === 'pdf') return true;
+  return (item.mimeType === 'application/pdf') || item.name.toLowerCase().endsWith('.pdf');
+}
+
 export function isTextPreview(item: LibraryItem): boolean {
   if (item.kind !== 'file') return false;
   const extension = item.name.split('.').pop()?.toLowerCase() ?? '';

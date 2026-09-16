@@ -7,8 +7,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { categoryMeta, formatFileSize, useFileManager } from '@/context/FileManagerContext';
 import { useColors } from '@/hooks/useColors';
-import { formatRelativeTime, isPreviewableImage, isTextPreview } from '@/lib/filePresentation';
+import { formatRelativeTime, isPdfPreview, isPreviewableImage, isTextPreview } from '@/lib/filePresentation';
 import { FileGlyph } from '@/components/FileGlyph';
+import { PdfPreview } from '@/components/PdfPreview';
 
 export default function PreviewScreen() {
   const colors = useColors();
@@ -65,6 +66,45 @@ export default function PreviewScreen() {
     );
   }
 
+  const openShare = () => void shareItems([item.id]);
+  const openIn = () => {
+    void Share.share({ title: item.name, message: item.name, url: item.uri || undefined });
+  };
+  const moveToTrash = () => {
+    void trashItems([item.id]);
+    router.back();
+  };
+
+  if (isPdfPreview(item)) {
+    return (
+      <View style={[styles.screen, { backgroundColor: colors.background }]}>
+        <View style={[styles.pdfHeader, { paddingTop: insets.top + 8 }]}>
+          <Pressable onPress={() => router.back()} style={styles.back} accessibilityRole="button" accessibilityLabel="Back">
+            <Feather name="chevron-left" size={22} color={colors.foreground} />
+            <Text style={[styles.backLabel, { color: colors.foreground }]}>Files</Text>
+          </Pressable>
+          <Text style={[styles.pdfTitle, { color: colors.foreground }]} numberOfLines={1}>{item.name}</Text>
+        </View>
+        <View style={styles.pdfStage}>
+          <PdfPreview uri={item.uri} />
+        </View>
+        <View style={[styles.pdfActions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <Pressable onPress={openShare} style={[styles.action, { backgroundColor: colors.navy }]}>
+            <Feather name="share" size={16} color="#FFFFFF" />
+            <Text style={styles.actionText}>Share</Text>
+          </Pressable>
+          <Pressable onPress={openIn} style={[styles.action, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+            <Feather name="external-link" size={16} color={colors.foreground} />
+            <Text style={[styles.actionText, { color: colors.foreground }]}>Open in…</Text>
+          </Pressable>
+        </View>
+        <Pressable onPress={moveToTrash} style={styles.pdfDelete}>
+          <Text style={[styles.deleteText, { color: colors.destructive }]}>Move to Recently Deleted</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 20, paddingBottom: 40 }}>
@@ -93,16 +133,11 @@ export default function PreviewScreen() {
         ) : null}
 
         <View style={styles.actions}>
-          <Pressable onPress={() => void shareItems([item.id])} style={[styles.action, { backgroundColor: colors.navy }]}>
+          <Pressable onPress={openShare} style={[styles.action, { backgroundColor: colors.navy }]}>
             <Feather name="share" size={16} color="#FFFFFF" />
             <Text style={styles.actionText}>Share</Text>
           </Pressable>
-          <Pressable
-            onPress={() => {
-              void Share.share({ title: item.name, message: item.name, url: item.uri || undefined });
-            }}
-            style={[styles.action, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
-          >
+          <Pressable onPress={openIn} style={[styles.action, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
             <Feather name="external-link" size={16} color={colors.foreground} />
             <Text style={[styles.actionText, { color: colors.foreground }]}>Open in…</Text>
           </Pressable>
@@ -117,13 +152,7 @@ export default function PreviewScreen() {
           ))}
         </View>
 
-        <Pressable
-          onPress={() => {
-            void trashItems([item.id]);
-            router.back();
-          }}
-          style={styles.delete}
-        >
+        <Pressable onPress={moveToTrash} style={styles.delete}>
           <Text style={[styles.deleteText, { color: colors.destructive }]}>Move to Recently Deleted</Text>
         </Pressable>
       </ScrollView>
@@ -133,8 +162,13 @@ export default function PreviewScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  back: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  back: { flexDirection: 'row', alignItems: 'center' },
   backLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  pdfHeader: { paddingHorizontal: 20, paddingBottom: 10, gap: 8 },
+  pdfTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.4 },
+  pdfStage: { flex: 1, paddingHorizontal: 16, minHeight: 0 },
+  pdfActions: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 12 },
+  pdfDelete: { minHeight: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   hero: { minHeight: 220, borderRadius: 24, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginBottom: 18 },
   heroGlyph: { paddingVertical: 48 },
   image: { width: '100%', height: 280 },
