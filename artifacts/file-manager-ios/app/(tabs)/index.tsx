@@ -83,11 +83,6 @@ export default function HomeScreen() {
     setTimeout(() => setNotice(null), 2200);
   };
 
-  const comingSoon = (label: string) => {
-    Haptics.selectionAsync();
-    showNotice(`${label} is coming in a later update.`);
-  };
-
   const refreshStorage = async () => {
     const next = await readDeviceStorage();
     setDeviceStorage(next);
@@ -178,9 +173,9 @@ export default function HomeScreen() {
             <View style={[styles.quickIcon, { backgroundColor: '#FCE5AC' }]}><Icon name="folder-plus" color="#10243D" /></View>
             <Text style={[styles.quickLabel, { color: colors.foreground }]}>New folder</Text>
           </Pressable>
-          <Pressable onPress={() => comingSoon('Document scanning')} style={({ pressed }) => [styles.quickAction, { backgroundColor: colors.card }, pressed && styles.pressed]}>
+          <Pressable onPress={() => router.push('/scan')} style={({ pressed }) => [styles.quickAction, { backgroundColor: colors.card }, pressed && styles.pressed]}>
             <View style={[styles.quickIcon, { backgroundColor: '#BCEEDB' }]}><Icon name="camera" color="#10243D" /></View>
-            <Text style={[styles.quickLabel, { color: colors.foreground }]}>Scan later</Text>
+            <Text style={[styles.quickLabel, { color: colors.foreground }]}>Scan document</Text>
           </Pressable>
           <Pressable onPress={() => router.push('/(tabs)/files')} style={({ pressed }) => [styles.quickAction, { backgroundColor: colors.card }, pressed && styles.pressed]}>
             <View style={[styles.quickIcon, { backgroundColor: '#E4DFFD' }]}><Icon name="layers" color="#10243D" /></View>

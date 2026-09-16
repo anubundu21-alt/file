@@ -131,6 +131,7 @@ export default function FilesScreen() {
     toggleFavorite,
     trashItems,
     shareItems,
+    exportItems,
     markOpened,
     reloadLibrary,
     clearError,
@@ -370,6 +371,7 @@ export default function FilesScreen() {
         <SelectionBar
           count={selectedIds.length}
           onShare={() => void shareItems(selectedIds)}
+          onSave={() => void exportItems(selectedIds)}
           onMove={() => setMovingIds(selectedIds)}
           onFavorite={() => selectedIds.forEach((id) => toggleFavorite(id))}
           onTrash={() => {
@@ -385,6 +387,7 @@ export default function FilesScreen() {
         options={sheetItem ? [
           ...(sheetItem.kind === 'file' ? [{ label: 'Open', onPress: () => router.push(`/preview/${sheetItem.id}`) }] : [{ label: 'Open folder', onPress: () => setFolderId(sheetItem.id) }]),
           ...(sheetItem.kind === 'file' ? [{ label: 'Share', onPress: () => void shareItems([sheetItem.id]) }] : []),
+          ...(sheetItem.kind === 'file' ? [{ label: 'Save to Files', onPress: () => void exportItems([sheetItem.id]) }] : []),
           { label: 'Rename', onPress: () => setPrompt({ mode: 'rename', item: sheetItem }) },
           { label: 'Move', onPress: () => setMovingIds([sheetItem.id]) },
           ...(sheetItem.kind === 'file' ? [{ label: 'Duplicate', onPress: () => void duplicateItem(sheetItem.id) }] : []),

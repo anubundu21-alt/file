@@ -7,15 +7,24 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { categoryMeta, formatFileSize, useFileManager } from '@/context/FileManagerContext';
 import { useColors } from '@/hooks/useColors';
-import { formatRelativeTime, isPdfPreview, isPreviewableImage, isTextPreview } from '@/lib/filePresentation';
+import {
+  formatRelativeTime,
+  isAudioPreview,
+  isPdfPreview,
+  isPreviewableImage,
+  isTextPreview,
+  isVideoPreview,
+} from '@/lib/filePresentation';
+import { AudioPreview } from '@/components/AudioPreview';
 import { FileGlyph } from '@/components/FileGlyph';
 import { PdfPreview } from '@/components/PdfPreview';
+import { VideoPreview } from '@/components/VideoPreview';
 
 export default function PreviewScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { items, shareItems, trashItems, markOpened } = useFileManager();
+  const { items, shareItems, exportItems, trashItems, markOpened } = useFileManager();
   const item = items.find((entry) => entry.id === id);
   const [text, setText] = useState<string | null>(null);
   const [textError, setTextError] = useState(false);
@@ -67,6 +76,7 @@ export default function PreviewScreen() {
   }
 
   const openShare = () => void shareItems([item.id]);
+  const saveToFiles = () => void exportItems([item.id]);
   const openIn = () => {
     void Share.share({ title: item.name, message: item.name, url: item.uri || undefined });
   };
@@ -75,7 +85,24 @@ export default function PreviewScreen() {
     router.back();
   };
 
-  if (isPdfPreview(item)) {
+  const actionRow = (
+    <View style={styles.actions}>
+      <Pressable onPress={openShare} style={[styles.action, { backgroundColor: colors.navy }]}>
+        <Feather name="share" size={16} color="#FFFFFF" />
+        <Text style={styles.actionText}>Share</Text>
+      </Pressable>
+      <Pressable onPress={saveToFiles} style={[styles.action, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+        <Feather name="folder" size={16} color={colors.foreground} />
+        <Text style={[styles.actionText, { color: colors.foreground }]}>Save</Text>
+      </Pressable>
+      <Pressable onPress={openIn} style={[styles.action, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+        <Feather name="external-link" size={16} color={colors.foreground} />
+        <Text style={[styles.actionText, { color: colors.foreground }]}>Open</Text>
+      </Pressable>
+    </View>
+  );
+
+  if (isPdfPreview(item) || isVideoPreview(item)) {
     return (
       <View style={[styles.screen, { backgroundColor: colors.background }]}>
         <View style={[styles.pdfHeader, { paddingTop: insets.top + 8 }]}>
@@ -86,17 +113,10 @@ export default function PreviewScreen() {
           <Text style={[styles.pdfTitle, { color: colors.foreground }]} numberOfLines={1}>{item.name}</Text>
         </View>
         <View style={styles.pdfStage}>
-          <PdfPreview uri={item.uri} />
+          {isPdfPreview(item) ? <PdfPreview uri={item.uri} /> : <VideoPreview key={item.uri} uri={item.uri} />}
         </View>
         <View style={[styles.pdfActions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <Pressable onPress={openShare} style={[styles.action, { backgroundColor: colors.navy }]}>
-            <Feather name="share" size={16} color="#FFFFFF" />
-            <Text style={styles.actionText}>Share</Text>
-          </Pressable>
-          <Pressable onPress={openIn} style={[styles.action, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
-            <Feather name="external-link" size={16} color={colors.foreground} />
-            <Text style={[styles.actionText, { color: colors.foreground }]}>Open in…</Text>
-          </Pressable>
+          {actionRow}
         </View>
         <Pressable onPress={moveToTrash} style={styles.pdfDelete}>
           <Text style={[styles.deleteText, { color: colors.destructive }]}>Move to Recently Deleted</Text>
@@ -124,6 +144,7 @@ export default function PreviewScreen() {
         </View>
 
         <Text style={[styles.name, { color: colors.foreground }]}>{item.name}</Text>
+        {isAudioPreview(item) ? <AudioPreview key={item.uri} uri={item.uri} /> : null}
         {isTextPreview(item) ? (
           <View style={[styles.textCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.textBody, { color: colors.inkSoft }]}>
@@ -132,16 +153,7 @@ export default function PreviewScreen() {
           </View>
         ) : null}
 
-        <View style={styles.actions}>
-          <Pressable onPress={openShare} style={[styles.action, { backgroundColor: colors.navy }]}>
-            <Feather name="share" size={16} color="#FFFFFF" />
-            <Text style={styles.actionText}>Share</Text>
-          </Pressable>
-          <Pressable onPress={openIn} style={[styles.action, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
-            <Feather name="external-link" size={16} color={colors.foreground} />
-            <Text style={[styles.actionText, { color: colors.foreground }]}>Open in…</Text>
-          </Pressable>
-        </View>
+        {actionRow}
 
         <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
           {details.map(([label, value], index) => (
@@ -167,7 +179,7 @@ const styles = StyleSheet.create({
   pdfHeader: { paddingHorizontal: 20, paddingBottom: 10, gap: 8 },
   pdfTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.4 },
   pdfStage: { flex: 1, paddingHorizontal: 16, minHeight: 0 },
-  pdfActions: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 12 },
+  pdfActions: { paddingHorizontal: 20, paddingTop: 12 },
   pdfDelete: { minHeight: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   hero: { minHeight: 220, borderRadius: 24, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginBottom: 18 },
   heroGlyph: { paddingVertical: 48 },
@@ -176,8 +188,8 @@ const styles = StyleSheet.create({
   textCard: { borderRadius: 18, borderWidth: 1, padding: 14, marginBottom: 16, maxHeight: 280 },
   textBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 20 },
   actions: { flexDirection: 'row', gap: 10, marginBottom: 18 },
-  action: { flex: 1, minHeight: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  actionText: { color: '#FFFFFF', fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  action: { flex: 1, minHeight: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  actionText: { color: '#FFFFFF', fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   infoCard: { borderRadius: 18, paddingHorizontal: 16 },
   infoRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   infoLabel: { fontFamily: 'Inter_500Medium', fontSize: 13 },

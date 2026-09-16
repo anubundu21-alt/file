@@ -12,6 +12,7 @@ import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Directory, File } from 'expo-file-system';
 import * as Linking from 'expo-linking';
 import * as Sharing from 'expo-sharing';
 import {
@@ -67,7 +68,9 @@ type FileManagerContextValue = {
   emptyTrash: () => Promise<void>;
   markOpened: (id: string) => Promise<void>;
   shareItems: (ids: string[]) => Promise<void>;
+  exportItems: (ids: string[]) => Promise<void>;
   importInbox: () => Promise<number>;
+  importScans: (pages: { uri: string; name: string; mimeType?: string | null }[]) => Promise<number>;
   reloadLibrary: () => Promise<void>;
   clearError: () => void;
   getItem: (id: string) => LibraryItem | undefined;
@@ -117,11 +120,15 @@ const categoryByExtension: Record<string, FileCategory> = {
   m4v: 'video',
   avi: 'video',
   mkv: 'video',
+  webm: 'video',
+  '3gp': 'video',
   mp3: 'audio',
   wav: 'audio',
   m4a: 'audio',
   aac: 'audio',
   flac: 'audio',
+  ogg: 'audio',
+  opus: 'audio',
 };
 
 export const categoryMeta: Record<FileCategory, { label: string; color: string }> = {
@@ -229,6 +236,16 @@ function descendantIds(items: LibraryItem[], rootIds: string[]): Set<string> {
     }
   }
   return ids;
+}
+
+function uniqueExportName(directory: Directory, name: string): string {
+  if (!new File(directory, name).exists) return name;
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : '';
+  let index = 2;
+  while (new File(directory, `${base} ${index}${ext}`).exists) index += 1;
+  return `${base} ${index}${ext}`;
 }
 
 export function FileManagerProvider({ children }: { children: ReactNode }) {
@@ -357,7 +374,12 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     }
   }, [commit, enqueue, ensureManagedDirectory, isLoading, isReady]);
 
-  const importIncomingFile = useCallback(async (uri: string, name: string, parentId: string | null) => {
+  const importIncomingFile = useCallback(async (
+    uri: string,
+    name: string,
+    parentId: string | null,
+    mimeType: string | null = null,
+  ) => {
     if (!uri || handledUrlsRef.current.has(uri)) return null;
     handledUrlsRef.current.add(uri);
     const id = createId('external');
@@ -380,8 +402,8 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
         parentId,
         uri: destination,
         size,
-        mimeType: null,
-        category: classifyFile(name),
+        mimeType,
+        category: classifyFile(name, mimeType),
         createdAt,
         modifiedAt: createdAt,
         openedAt: createdAt,
@@ -457,6 +479,17 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
           handledUrlsRef.current.delete(file.uri);
         }
       }
+    }
+    return importedCount;
+  }, [ensureScansFolder, importIncomingFile, isLoading, isReady]);
+
+  const importScans = useCallback(async (pages: { uri: string; name: string; mimeType?: string | null }[]) => {
+    if (!isReady || isLoading || !pages.length) return 0;
+    const parentId = await ensureScansFolder();
+    let importedCount = 0;
+    for (const page of pages) {
+      const imported = await importIncomingFile(page.uri, page.name, parentId, page.mimeType ?? null);
+      if (imported) importedCount += 1;
     }
     return importedCount;
   }, [ensureScansFolder, importIncomingFile, isLoading, isReady]);
@@ -635,6 +668,51 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const exportItems = useCallback(async (ids: string[]) => {
+    const filesToExport = itemsRef.current.filter((item) => (
+      ids.includes(item.id) && item.kind === 'file' && item.uri && !item.deletedAt
+    ));
+    if (!filesToExport.length) {
+      setError('There is no file to save yet.');
+      return;
+    }
+    try {
+      if (Platform.OS === 'web') {
+        filesToExport.forEach((item) => {
+          const link = document.createElement('a');
+          link.href = item.uri;
+          link.download = item.name;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        });
+        return;
+      }
+      try {
+        const directory = await Directory.pickDirectoryAsync();
+        for (const item of filesToExport) {
+          const desired = uniqueExportName(directory, item.name);
+          await new File(item.uri).copy(new File(directory, desired));
+        }
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+        if (message.includes('cancel') || message.includes('dismiss') || message.includes('aborted')) return;
+        const available = await Sharing.isAvailableAsync();
+        if (!available) {
+          setError('Sift could not save that file to Files.');
+          return;
+        }
+        await Sharing.shareAsync(filesToExport[0].uri, {
+          mimeType: filesToExport[0].mimeType ?? undefined,
+          dialogTitle: 'Save to Files',
+        });
+      }
+    } catch {
+      setError('Sift could not save that file to Files.');
+    }
+  }, []);
+
   const getItem = useCallback((id: string) => items.find((item) => item.id === id), [items]);
 
   const childrenOf = useCallback((parentId: string | null) => (
@@ -687,7 +765,9 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     emptyTrash,
     markOpened,
     shareItems,
+    exportItems,
     importInbox,
+    importScans,
     reloadLibrary,
     clearError: () => setError(null),
     getItem,
@@ -704,11 +784,13 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     duplicateItem,
     emptyTrash,
     error,
+    exportItems,
     files,
     folderOptions,
     getItem,
     importFiles,
     importInbox,
+    importScans,
     isImporting,
     isLoading,
     isReady,

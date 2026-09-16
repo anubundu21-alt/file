@@ -26,6 +26,14 @@ export function isPdfPreview(item: LibraryItem): boolean {
   return (item.mimeType === 'application/pdf') || item.name.toLowerCase().endsWith('.pdf');
 }
 
+export function isVideoPreview(item: LibraryItem): boolean {
+  return item.kind === 'file' && item.category === 'video';
+}
+
+export function isAudioPreview(item: LibraryItem): boolean {
+  return item.kind === 'file' && item.category === 'audio';
+}
+
 export function isTextPreview(item: LibraryItem): boolean {
   if (item.kind !== 'file') return false;
   const extension = item.name.split('.').pop()?.toLowerCase() ?? '';

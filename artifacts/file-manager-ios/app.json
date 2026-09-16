@@ -18,6 +18,8 @@
       "infoPlist": {
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": false,
+        "NSCameraUsageDescription": "Sift uses the camera to scan documents into your library.",
+        "NSPhotoLibraryUsageDescription": "Sift uses your photos when you add scan pages from the library.",
         "CFBundleDocumentTypes": [
           {
             "CFBundleTypeName": "Files",
@@ -50,7 +52,17 @@
           "resizeMode": "contain",
           "backgroundColor": "#10243D"
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Sift uses the camera to scan documents into your library.",
+          "photosPermission": "Sift uses your photos when you add scan pages from the library.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-video",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

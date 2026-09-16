@@ -3,8 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AppSettingsProvider, useAppSettings } from '@/context/AppSettingsContext';
 import { FileManagerProvider } from '@/context/FileManagerContext';
+import { useColors } from '@/hooks/useColors';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -21,13 +24,19 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  const colors = useColors();
+  const { resolvedScheme } = useAppSettings();
   return (
-    <Stack screenOptions={{ headerBackTitle: 'Back', headerShown: false, contentStyle: { backgroundColor: '#F5F7F4' } }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="preview/[id]" />
-      <Stack.Screen name="trash" />
-    </Stack>
+    <>
+      <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerBackTitle: 'Back', headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="preview/[id]" />
+        <Stack.Screen name="scan" />
+        <Stack.Screen name="trash" />
+      </Stack>
+    </>
   );
 }
 
@@ -53,9 +62,11 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
             <KeyboardProvider>
-              <FileManagerProvider>
-                <RootLayoutNav />
-              </FileManagerProvider>
+              <AppSettingsProvider>
+                <FileManagerProvider>
+                  <RootLayoutNav />
+                </FileManagerProvider>
+              </AppSettingsProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
@@ -63,3 +74,4 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+

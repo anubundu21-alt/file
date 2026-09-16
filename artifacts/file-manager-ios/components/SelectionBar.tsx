@@ -7,17 +7,19 @@ import { useColors } from '@/hooks/useColors';
 type SelectionBarProps = {
   count: number;
   onShare: () => void;
+  onSave: () => void;
   onMove: () => void;
   onFavorite: () => void;
   onTrash: () => void;
 };
 
-export function SelectionBar({ count, onShare, onMove, onFavorite, onTrash }: SelectionBarProps) {
+export function SelectionBar({ count, onShare, onSave, onMove, onFavorite, onTrash }: SelectionBarProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const actions = [
     { label: 'Share', icon: 'share' as const, onPress: onShare },
-    { label: 'Move', icon: 'folder' as const, onPress: onMove },
+    { label: 'Save', icon: 'folder' as const, onPress: onSave },
+    { label: 'Move', icon: 'corner-up-right' as const, onPress: onMove },
     { label: 'Favorite', icon: 'star' as const, onPress: onFavorite },
     { label: 'Delete', icon: 'trash-2' as const, onPress: onTrash },
   ];
@@ -41,6 +43,6 @@ const styles = StyleSheet.create({
   bar: { position: 'absolute', left: 16, right: 16, bottom: 92, borderRadius: 20, paddingTop: 12, paddingHorizontal: 16, shadowColor: '#10243D', shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
   count: { color: '#9DB2A8', fontFamily: 'Inter_500Medium', fontSize: 12, marginBottom: 10 },
   actions: { flexDirection: 'row', justifyContent: 'space-between' },
-  action: { alignItems: 'center', gap: 6, minWidth: 62 },
+  action: { alignItems: 'center', gap: 6, minWidth: 52 },
   actionLabel: { color: '#FFFFFF', fontFamily: 'Inter_600SemiBold', fontSize: 11 },
 });

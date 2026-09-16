@@ -34,7 +34,7 @@ export function ActionSheet({ visible, title, message, options, onClose }: Actio
                 option.onPress();
                 onClose();
               }}
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.row, { borderBottomColor: colors.border }, pressed && styles.pressed]}
             >
               <Text style={[styles.rowLabel, { color: option.destructive ? colors.destructive : colors.foreground }]}>
                 {option.label}
@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 17, letterSpacing: -0.2 },
   message: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 6, marginBottom: 8 },
-  row: { minHeight: 52, justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#DEE7E0' },
+  row: { minHeight: 52, justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
   rowLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
   cancel: { marginTop: 12, minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   cancelText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
