@@ -10,12 +10,18 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.replit.filemanagerios",
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.replit.filemanagerios"
+        ]
+      },
       "infoPlist": {
         "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": false,
         "CFBundleDocumentTypes": [
           {
             "CFBundleTypeName": "Files",
-            "CFBundleTypeRole": "Viewer",
+            "CFBundleTypeRole": "Editor",
             "LSHandlerRank": "Alternate",
             "LSItemContentTypes": [
               "public.data",

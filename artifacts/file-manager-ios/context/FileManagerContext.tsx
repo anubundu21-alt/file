@@ -8,12 +8,18 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Linking from 'expo-linking';
 import * as Sharing from 'expo-sharing';
+import {
+  isSiftInboxUrl,
+  listSiftInboxFiles,
+  removeInboxFile,
+  SIFT_SCANS_FOLDER,
+} from '@/lib/siftInbox';
 
 export type FileCategory =
   | 'pdf'
@@ -61,6 +67,7 @@ type FileManagerContextValue = {
   emptyTrash: () => Promise<void>;
   markOpened: (id: string) => Promise<void>;
   shareItems: (ids: string[]) => Promise<void>;
+  importInbox: () => Promise<number>;
   reloadLibrary: () => Promise<void>;
   clearError: () => void;
   getItem: (id: string) => LibraryItem | undefined;
@@ -350,25 +357,29 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     }
   }, [commit, enqueue, ensureManagedDirectory, isLoading, isReady]);
 
-  const importExternalUri = useCallback(async (uri: string) => {
-    if (!isReady || isLoading || Platform.OS === 'web' || !uri.startsWith('file://') || handledUrlsRef.current.has(uri)) return;
+  const importIncomingFile = useCallback(async (uri: string, name: string, parentId: string | null) => {
+    if (!uri || handledUrlsRef.current.has(uri)) return null;
     handledUrlsRef.current.add(uri);
-    const rawName = uri.split('?')[0]?.split('/').pop() ?? 'Imported file';
-    const name = decodeURIComponent(rawName);
     const id = createId('external');
-    const destination = `${MANAGED_DIRECTORY}${id}-${safeFileName(name)}`;
+    const destination = Platform.OS === 'web'
+      ? uri
+      : `${MANAGED_DIRECTORY}${id}-${safeFileName(name)}`;
     try {
       await ensureManagedDirectory();
-      const sourceInfo = await FileSystem.getInfoAsync(uri);
-      await FileSystem.copyAsync({ from: uri, to: destination });
+      let size = 0;
+      if (Platform.OS !== 'web') {
+        const sourceInfo = await FileSystem.getInfoAsync(uri);
+        if (sourceInfo.exists && 'size' in sourceInfo) size = sourceInfo.size ?? 0;
+        await FileSystem.copyAsync({ from: uri, to: destination });
+      }
       const createdAt = nowIso();
       const imported: LibraryItem = {
         id,
         name,
         kind: 'file',
-        parentId: null,
+        parentId,
         uri: destination,
-        size: sourceInfo.exists && 'size' in sourceInfo ? sourceInfo.size : 0,
+        size,
         mimeType: null,
         category: classifyFile(name),
         createdAt,
@@ -380,22 +391,23 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
       await enqueue(async () => {
         await commit([imported, ...itemsRef.current]);
       });
+      return imported;
     } catch {
-      await FileSystem.deleteAsync(destination, { idempotent: true }).catch(() => undefined);
-      setError('Sift could not save the file opened from another app.');
+      handledUrlsRef.current.delete(uri);
+      if (Platform.OS !== 'web') {
+        await FileSystem.deleteAsync(destination, { idempotent: true }).catch(() => undefined);
+      }
+      return null;
     }
-  }, [commit, enqueue, ensureManagedDirectory, isLoading, isReady]);
+  }, [commit, enqueue, ensureManagedDirectory]);
 
-  useEffect(() => {
-    if (isLoading) return;
-    void Linking.getInitialURL().then((url) => {
-      if (url) void importExternalUri(url);
-    });
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      void importExternalUri(url);
-    });
-    return () => subscription.remove();
-  }, [importExternalUri, isLoading]);
+  const importExternalUri = useCallback(async (uri: string) => {
+    if (!isReady || isLoading || Platform.OS === 'web' || !uri.startsWith('file://')) return;
+    const rawName = uri.split('?')[0]?.split('/').pop() ?? 'Imported file';
+    const name = decodeURIComponent(rawName);
+    const imported = await importIncomingFile(uri, name, null);
+    if (!imported) setError('Sift could not save the file opened from another app.');
+  }, [importIncomingFile, isLoading, isReady]);
 
   const createFolder = useCallback(async (name: string, parentId: string | null = null) => {
     const trimmed = name.trim();
@@ -421,6 +433,59 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     });
     return folder;
   }, [commit, enqueue]);
+
+  const ensureScansFolder = useCallback(async () => {
+    const existing = itemsRef.current.find((item) => (
+      item.kind === 'folder' && !item.deletedAt && item.parentId === null && item.name === SIFT_SCANS_FOLDER
+    ));
+    if (existing) return existing.id;
+    const folder = await createFolder(SIFT_SCANS_FOLDER, null);
+    return folder?.id ?? null;
+  }, [createFolder]);
+
+  const importInbox = useCallback(async () => {
+    if (!isReady || isLoading || Platform.OS !== 'ios') return 0;
+    const pending = listSiftInboxFiles();
+    if (!pending.length) return 0;
+    const parentId = await ensureScansFolder();
+    let importedCount = 0;
+    for (const file of pending) {
+      const imported = await importIncomingFile(file.uri, file.name, parentId);
+      if (imported) {
+        importedCount += 1;
+        if (removeInboxFile(file.uri)) {
+          handledUrlsRef.current.delete(file.uri);
+        }
+      }
+    }
+    return importedCount;
+  }, [ensureScansFolder, importIncomingFile, isLoading, isReady]);
+
+  const handleIncomingUrl = useCallback(async (url: string) => {
+    if (isSiftInboxUrl(url)) {
+      await importInbox();
+      return;
+    }
+    await importExternalUri(url);
+  }, [importExternalUri, importInbox]);
+
+  useEffect(() => {
+    if (isLoading || !isReady) return;
+    void importInbox();
+    void Linking.getInitialURL().then((url) => {
+      if (url) void handleIncomingUrl(url);
+    });
+    const linking = Linking.addEventListener('url', ({ url }) => {
+      void handleIncomingUrl(url);
+    });
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void importInbox();
+    });
+    return () => {
+      linking.remove();
+      appState.remove();
+    };
+  }, [handleIncomingUrl, importInbox, isLoading, isReady]);
 
   const renameItem = useCallback(async (id: string, name: string) => {
     const trimmed = name.trim();
@@ -622,6 +687,7 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     emptyTrash,
     markOpened,
     shareItems,
+    importInbox,
     reloadLibrary,
     clearError: () => setError(null),
     getItem,
@@ -642,6 +708,7 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     folderOptions,
     getItem,
     importFiles,
+    importInbox,
     isImporting,
     isLoading,
     isReady,
