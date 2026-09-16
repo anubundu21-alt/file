@@ -49,6 +49,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8f6e68e4-69d2-4221-bf00-c93a70cf2a45"
+      }
+    },
+    "owner": "rakpa"
   }
 }
