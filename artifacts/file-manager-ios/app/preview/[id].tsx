@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -27,17 +27,21 @@ export default function PreviewScreen() {
   React.useEffect(() => {
     let active = true;
     if (!item || !isTextPreview(item) || !item.uri) return;
-    void FileSystem.readAsStringAsync(item.uri)
-      .then((value) => {
+    const load = async () => {
+      try {
+        const value = Platform.OS === 'web'
+          ? await (await fetch(item.uri)).text()
+          : await FileSystem.readAsStringAsync(item.uri);
         if (active) setText(value.slice(0, 20000));
-      })
-      .catch(() => {
+      } catch {
         if (active) setTextError(true);
-      });
+      }
+    };
+    void load();
     return () => {
       active = false;
     };
-  }, [item]);
+  }, [item?.id, item?.uri]);
 
   const details = useMemo(() => {
     if (!item) return [];
