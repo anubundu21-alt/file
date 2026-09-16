@@ -58,8 +58,8 @@ export default function HomeScreen() {
   }, []);
   const activeFiles = files;
   const totalBytes = useMemo(() => activeFiles.reduce((sum, file) => sum + file.size, 0), [activeFiles]);
-  const usedRatio = deviceStorage && deviceStorage.total > 0
-    ? Math.min(1, deviceStorage.used / deviceStorage.total)
+  const freeRatio = deviceStorage && deviceStorage.total > 0
+    ? Math.min(1, deviceStorage.free / deviceStorage.total)
     : 0;
   const recentFiles = useMemo(() => [...activeFiles]
     .sort((a, b) => new Date(b.openedAt ?? b.createdAt).getTime() - new Date(a.openedAt ?? a.createdAt).getTime())
@@ -134,29 +134,31 @@ export default function HomeScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.storageEyebrow}>{deviceStorage?.source === 'browser' ? 'BROWSER STORAGE' : 'IPHONE STORAGE'}</Text>
               <Text style={styles.storageTotal}>
-                {deviceStorage ? formatStorageSize(deviceStorage.total) : '—'}
-                <Text style={styles.storageUnit}>  capacity</Text>
+                {deviceStorage ? formatStorageSize(deviceStorage.free) : '—'}
+                <Text style={styles.storageUnit}>  free</Text>
+              </Text>
+              <Text style={styles.storageOf}>
+                {deviceStorage ? `of ${formatStorageSize(deviceStorage.total)}` : 'of —'}
               </Text>
             </View>
             <View style={styles.storageRing}>
-              <Text style={styles.storageRingText}>{deviceStorage ? `${Math.round(usedRatio * 100)}%` : '—'}</Text>
+              <Text style={styles.storageRingText}>{deviceStorage ? `${Math.round(freeRatio * 100)}%` : '—'}</Text>
             </View>
           </View>
           <View style={styles.storageBar}>
-            <View style={[styles.storageBarSegment, { flex: Math.max(deviceStorage?.used ?? 1, 1), backgroundColor: colors.teal }]} />
-            <View style={[styles.storageBarSegment, { flex: Math.max(deviceStorage?.free ?? 1, 1), backgroundColor: '#385169' }]} />
+            <View style={[styles.storageBarFill, { width: `${Math.min(100, Math.max(0, freeRatio * 100))}%`, backgroundColor: colors.teal }]} />
           </View>
           <View style={styles.storageStats}>
+            <View style={styles.storageStat}>
+              <Text style={styles.storageStatLabel}>Free</Text>
+              <Text style={styles.storageStatValue}>{deviceStorage ? formatStorageSize(deviceStorage.free) : '—'}</Text>
+            </View>
             <View style={styles.storageStat}>
               <Text style={styles.storageStatLabel}>Used</Text>
               <Text style={styles.storageStatValue}>{deviceStorage ? formatStorageSize(deviceStorage.used) : '—'}</Text>
             </View>
             <View style={styles.storageStat}>
-              <Text style={styles.storageStatLabel}>Available</Text>
-              <Text style={styles.storageStatValue}>{deviceStorage ? formatStorageSize(deviceStorage.free) : '—'}</Text>
-            </View>
-            <View style={styles.storageStat}>
-              <Text style={styles.storageStatLabel}>Capacity</Text>
+              <Text style={styles.storageStatLabel}>Out of</Text>
               <Text style={styles.storageStatValue}>{deviceStorage ? formatStorageSize(deviceStorage.total) : '—'}</Text>
             </View>
           </View>
@@ -269,10 +271,11 @@ const styles = StyleSheet.create({
   storageEyebrow: { color: '#9DB2A8', fontFamily: 'Inter_600SemiBold', letterSpacing: 1.4, fontSize: 10 },
   storageTotal: { color: '#FFFFFF', fontFamily: 'Inter_700Bold', fontSize: 32, letterSpacing: -1, marginTop: 7 },
   storageUnit: { fontFamily: 'Inter_400Regular', fontSize: 13, letterSpacing: 0, color: '#B6C8BE' },
+  storageOf: { color: '#9DB2A8', fontFamily: 'Inter_500Medium', fontSize: 13, marginTop: 4 },
   storageRing: { width: 58, height: 58, borderRadius: 29, borderWidth: 5, borderColor: '#19C88A', borderLeftColor: '#385169', alignItems: 'center', justifyContent: 'center' },
   storageRingText: { color: '#FFFFFF', fontFamily: 'Inter_600SemiBold', fontSize: 13 },
-  storageBar: { height: 10, backgroundColor: '#263F56', borderRadius: 5, marginTop: 22, flexDirection: 'row', overflow: 'hidden', gap: 2 },
-  storageBarSegment: { height: '100%', minWidth: 8 },
+  storageBar: { height: 10, backgroundColor: '#263F56', borderRadius: 5, marginTop: 22, overflow: 'hidden' },
+  storageBarFill: { height: '100%', borderRadius: 5 },
   storageStats: { flexDirection: 'row', marginTop: 16, gap: 10 },
   storageStat: { flex: 1, gap: 4 },
   storageStatLabel: { color: '#9DB2A8', fontFamily: 'Inter_500Medium', fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase' },
