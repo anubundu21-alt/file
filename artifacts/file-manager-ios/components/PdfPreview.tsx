@@ -71,7 +71,7 @@ export function PdfPreview({ uri }: { uri: string }) {
 }
 
 const styles = StyleSheet.create({
-  frame: { flex: 1, minHeight: 420, borderRadius: 20, overflow: 'hidden' },
+  frame: { flex: 1, minHeight: 0, borderRadius: 20, overflow: 'hidden' },
   webview: { flex: 1, backgroundColor: '#FFFFFF' },
   loading: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
   fallback: { flex: 1, minHeight: 220, borderRadius: 20, alignItems: 'center', justifyContent: 'center', padding: 24 },
