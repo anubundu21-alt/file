@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "File Manager iOS",
+    "slug": "file-manager-ios",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "file-manager-ios",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.replit.filemanagerios",
+      "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Files",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "public.data",
+              "public.content",
+              "com.adobe.pdf",
+              "public.image",
+              "public.movie",
+              "public.audio",
+              "com.pkware.zip-archive"
+            ]
+          }
+        ]
+      }
+    },
+    "android": {},
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#10243D"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

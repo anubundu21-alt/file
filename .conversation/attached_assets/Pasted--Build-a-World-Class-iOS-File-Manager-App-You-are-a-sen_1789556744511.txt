@@ -1,0 +1,1358 @@
+# Build a World-Class iOS File Manager App
+
+You are a senior iOS product designer, React Native engineer, UX specialist, and SaaS/product monetization expert.
+
+Build a **premium, modern iOS file manager application using React Native**.
+
+The goal is to create a file manager that is significantly easier, cleaner, more visually engaging, and more useful than the default Apple Files experience.
+
+The application should feel like a **premium consumer productivity app**, not a technical file browser.
+
+---
+
+# 1. Product Vision
+
+Create the easiest file manager for iPhone and iPad.
+
+Users should be able to:
+
+* Find files instantly
+* Organize files effortlessly
+* Preview files beautifully
+* Search intelligently
+* Clean unnecessary files
+* Compress and extract files
+* Convert files
+* Scan documents
+* Protect private files
+* Share files
+* Manage downloads
+* Connect cloud storage
+* Understand where their storage is being used
+
+The UX should require almost no learning.
+
+Prioritize:
+
+**Simple → Visual → Fast → Smart → Powerful**
+
+Do NOT copy Apple's Files UI.
+
+Create a distinctive product identity.
+
+---
+
+# 2. Technology
+
+Use:
+
+* React Native
+* TypeScript
+* React Navigation
+* Native iOS APIs wherever appropriate
+* iOS 17+ design conventions
+* iOS Document Picker / Files integration
+* FileProvider integration where appropriate
+* Share Sheet integration
+* Quick Look / native previews where appropriate
+* Photos integration where appropriate
+* Face ID / Touch ID authentication where appropriate
+* StoreKit 2 for subscriptions
+* Local-first architecture
+* Secure Keychain storage
+* SQLite/local database where useful
+
+Architecture must be modular and production-ready.
+
+Do not create a prototype architecture that will need to be completely rewritten later.
+
+---
+
+# 3. Design Direction
+
+Create a **rich, bright, modern, premium UI**.
+
+The app should immediately feel exciting when opened.
+
+Design principles:
+
+* Bright backgrounds
+* Beautiful colorful file-type icons
+* Large visual cards
+* Excellent typography
+* Generous spacing
+* Rounded corners
+* Subtle shadows
+* Smooth animations
+* Clear hierarchy
+* Minimal clutter
+* Beautiful empty states
+* Friendly illustrations
+* Haptic feedback
+* Fluid transitions
+
+Use a modern color system rather than making everything monochrome.
+
+Suggested visual direction:
+
+Primary:
+
+* Deep navy: #10243D
+
+Accent:
+
+* Bright teal: #19C88A
+
+Supporting colors:
+
+* Purple
+* Blue
+* Orange
+* Pink
+* Yellow
+
+Use colors primarily for categorization and actions.
+
+Do not overuse gradients.
+
+Use **SF Pro / system iOS typography** unless there is a strong reason to use a custom font.
+
+The application must support:
+
+* Light mode
+* Dark mode
+* Dynamic Type
+* iPhone
+* iPad
+
+---
+
+# 4. Main Navigation
+
+Use a simple bottom navigation structure.
+
+Recommended tabs:
+
+1. Home
+2. Files
+3. Recent
+4. Tools
+5. Settings
+
+Do not overload the navigation.
+
+---
+
+# 5. Home Dashboard
+
+The Home screen should be the application's biggest differentiator.
+
+Display:
+
+## Welcome section
+
+Example:
+
+"Good morning 👋"
+
+"Everything you need, right here."
+
+Then show a beautiful storage summary.
+
+Example:
+
+iPhone Storage
+
+128 GB
+74.2 GB used
+
+[visual storage bar]
+
+Documents
+Photos
+Videos
+Audio
+Apps
+Other
+
+---
+
+## Quick Actions
+
+Create large attractive action buttons:
+
+* Scan Document
+* Import File
+* Create Folder
+* Compress
+* PDF Tools
+* Clean Storage
+
+Allow users to customize quick actions.
+
+---
+
+## Recent Files
+
+Show:
+
+* Recently opened
+* Recently imported
+* Recently downloaded
+
+Each file should have:
+
+* File icon/thumbnail
+* Filename
+* Type
+* Size
+* Date
+* Favorite indicator
+
+---
+
+## Smart Suggestions
+
+Create intelligent recommendations such as:
+
+"12 large files haven't been opened in 6 months."
+
+"3 duplicate files found."
+
+"Your Downloads folder has 2.4 GB."
+
+"5 files can be compressed."
+
+These suggestions should be actionable.
+
+---
+
+# 6. File Browser
+
+Create a beautiful file browsing experience.
+
+Support:
+
+* Folders
+* Files
+* Grid view
+* List view
+* Sorting
+* Filtering
+* Favorites
+* Recents
+* Tags
+* Folder colors
+* Folder icons
+* Breadcrumb navigation
+
+Sorting:
+
+* Name
+* Date modified
+* Date created
+* Size
+* Type
+
+Filtering:
+
+* Images
+* Videos
+* PDFs
+* Documents
+* Audio
+* Archives
+* Spreadsheets
+* Presentations
+* Other
+
+Allow users to switch between:
+
+Grid ↔ List
+
+Remember the user's preferred view.
+
+---
+
+# 7. File Actions
+
+Every file should have a powerful action menu.
+
+Actions:
+
+* Open
+* Preview
+* Rename
+* Move
+* Copy
+* Duplicate
+* Share
+* Favorite
+* Add Tag
+* Get Info
+* Compress
+* Delete
+
+Contextual actions should change depending on file type.
+
+---
+
+# 8. Multi-Select
+
+Users must be able to select multiple files.
+
+Actions:
+
+* Move
+* Copy
+* Delete
+* Compress
+* Share
+* Tag
+* Favorite
+* Rename
+* Export
+
+Show a clean bottom action bar.
+
+---
+
+# 9. Powerful Search
+
+Build an excellent search experience.
+
+Search by:
+
+* Filename
+* File type
+* Extension
+* Folder
+* Date
+* Size
+* Tags
+
+Support natural-language-style queries where technically feasible.
+
+Examples:
+
+"PDFs from last week"
+
+"Large videos"
+
+"Images larger than 10 MB"
+
+"Files modified yesterday"
+
+Show smart filters below the search field.
+
+Search should feel instant.
+
+---
+
+# 10. File Preview
+
+Provide beautiful previews for common file types.
+
+Support:
+
+* PDF
+* Images
+* Videos
+* Audio
+* TXT
+* CSV
+* JSON
+* DOC/DOCX where supported
+* XLS/XLSX where supported
+* PPT/PPTX where supported
+* ZIP/archive information
+
+Use native iOS preview capabilities wherever possible.
+
+---
+
+# 11. PDF Tools
+
+Create a dedicated PDF toolkit.
+
+Free:
+
+* View PDF
+* Share PDF
+* Rename PDF
+* Organize PDFs
+
+Pro:
+
+* Merge PDFs
+* Split PDF
+* Compress PDF
+* PDF → Word
+* Word → PDF
+* PDF → JPG
+* JPG → PDF
+* Reorder pages
+* Delete pages
+* Extract pages
+* Rotate pages
+* Password protect PDF
+* Remove PDF password where permitted
+* Add watermark
+* Add signature
+* Annotate PDF
+* Fill PDF forms
+
+Design these tools as beautiful visual cards.
+
+---
+
+# 12. ZIP & Archive Tools
+
+Support:
+
+* Create ZIP
+* Extract ZIP
+* Preview archive
+* Compress multiple files
+* Share archive
+
+Pro:
+
+* Password-protected ZIP
+* Higher compression controls
+* Advanced archive formats where technically supported
+
+---
+
+# 13. Document Scanner
+
+Integrate a powerful document scanner.
+
+Features:
+
+* Camera scanning
+* Automatic edge detection
+* Perspective correction
+* Auto enhancement
+* Multi-page scanning
+* OCR
+* PDF creation
+* Image export
+* Signature
+* Document naming
+
+The scanner should feel like a dedicated premium scanning application.
+
+---
+
+# 14. OCR
+
+Allow users to extract text from:
+
+* Documents
+* Images
+* Scanned PDFs
+
+Actions:
+
+* Copy text
+* Share text
+* Search text
+* Export text
+* Create TXT
+* Create PDF
+
+Use Apple's native Vision framework where appropriate.
+
+---
+
+# 15. Downloads Manager
+
+Create a dedicated Downloads experience.
+
+Display:
+
+* Active downloads
+* Completed downloads
+* Failed downloads
+
+Show:
+
+* Progress
+* Speed
+* File size
+* Remaining time
+* Pause
+* Resume
+* Cancel
+
+Where iOS platform restrictions prevent unrestricted background downloading, use Apple's supported APIs and clearly design around those limitations.
+
+---
+
+# 16. Storage Cleaner
+
+Create a beautiful storage analysis system.
+
+Categories:
+
+* Large files
+* Duplicate files
+* Similar photos
+* Old files
+* Downloads
+* Temporary files where safely detectable
+
+Show:
+
+"You can free up 4.8 GB"
+
+Then provide review screens before deletion.
+
+NEVER automatically delete user data.
+
+Require explicit confirmation.
+
+---
+
+# 17. Duplicate Finder
+
+Find:
+
+* Exact duplicate files
+* Duplicate photos where technically possible
+* Similar images where technically possible
+
+Group results visually.
+
+Example:
+
+3 identical files
+
+2.4 GB
+
+[Review]
+
+Allow:
+
+* Select all
+* Select individually
+* Keep newest
+* Keep oldest
+* Delete selected
+
+---
+
+# 18. Smart File Organization
+
+Add intelligent organization.
+
+Examples:
+
+Automatically suggest:
+
+"Create a folder for these 17 invoices?"
+
+"These 8 PDFs look like travel documents."
+
+"Move these screenshots to Screenshots?"
+
+Never move files automatically without user confirmation.
+
+---
+
+# 19. Tags
+
+Allow users to assign colorful tags.
+
+Example:
+
+🔴 Important
+
+🟢 Work
+
+🔵 Personal
+
+🟡 Travel
+
+🟣 Finance
+
+Users should be able to filter files by tags.
+
+---
+
+# 20. Favorites
+
+Allow files and folders to be favorited.
+
+Create a dedicated Favorites section.
+
+---
+
+# 21. Private Vault
+
+Create a secure private area.
+
+Features:
+
+* Face ID
+* Touch ID
+* Passcode fallback
+* Encrypted metadata
+* Secure file storage
+* Hidden files inside vault
+* Auto-lock
+
+The vault should have a premium, private feeling.
+
+Do not claim military-grade or unbreakable encryption unless technically verified.
+
+---
+
+# 22. Cloud Storage
+
+Design a unified cloud storage area.
+
+Potential integrations:
+
+* iCloud Drive
+* Google Drive
+* Dropbox
+* OneDrive
+
+Users should be able to browse supported cloud providers from one interface.
+
+Architecture must make providers modular so additional providers can be added later.
+
+Do not store third-party credentials insecurely.
+
+---
+
+# 23. File Transfer
+
+Create an easy file transfer experience.
+
+Support Apple's available mechanisms such as:
+
+* Share Sheet
+* AirDrop
+* Files integration
+* Open In
+* Import/Export
+
+Where feasible, add:
+
+"Transfer to another device"
+
+using secure local-network technologies.
+
+---
+
+# 24. Media Organization
+
+Create visual media browsing.
+
+Images:
+
+* Large thumbnails
+* Preview
+* Share
+* Move
+* Copy
+* Favorite
+* Delete
+
+Videos:
+
+* Thumbnail
+* Duration
+* Size
+* Resolution
+
+Audio:
+
+* Artwork where available
+* Duration
+* Play controls
+
+---
+
+# 25. File Information
+
+Create a beautiful information panel.
+
+Show:
+
+Filename
+Type
+Extension
+Size
+Created
+Modified
+Location
+Dimensions
+Resolution
+Duration
+Metadata where available
+
+Actions:
+
+Rename
+Move
+Share
+Compress
+
+---
+
+# 26. Trash / Recently Deleted
+
+Create a Trash section.
+
+Deleted files should go to Trash first when technically possible.
+
+Show:
+
+* File
+* Original location
+* Size
+* Deleted date
+
+Actions:
+
+* Restore
+* Delete permanently
+
+Allow:
+
+"Empty Trash"
+
+with confirmation.
+
+---
+
+# 27. Offline-First
+
+The core file manager must work without an internet connection.
+
+Cloud functionality should gracefully show offline states.
+
+Never show broken screens because the internet is unavailable.
+
+---
+
+# 28. Notifications
+
+Use notifications only when genuinely useful.
+
+Examples:
+
+"Download completed."
+
+"File conversion completed."
+
+"Your scan is ready."
+
+"Storage analysis finished."
+
+Avoid notification spam.
+
+---
+
+# 29. Free vs Pro
+
+Create a sustainable freemium model.
+
+## FREE
+
+Include enough functionality that the app is genuinely useful.
+
+Free:
+
+* File browsing
+* File organization
+* Search
+* Favorites
+* Basic preview
+* Basic file operations
+* Basic sharing
+* Basic ZIP extraction
+* Basic document scanning
+* Basic OCR
+* Recent files
+* Basic storage overview
+
+---
+
+## PRO
+
+Premium users receive:
+
+* Advanced PDF tools
+* PDF ↔ Word conversion
+* Advanced compression
+* Advanced OCR
+* Unlimited scans
+* Advanced document scanning
+* Duplicate finder
+* Smart storage cleaner
+* Private Vault
+* Cloud integrations
+* Advanced file organization
+* Password-protected archives
+* Advanced tagging
+* Custom themes
+* Advanced search
+* Batch operations
+* No advertisements
+* Priority processing
+* Future Pro features
+
+Do NOT artificially cripple basic file management just to force subscriptions.
+
+The free product should provide real value.
+
+---
+
+# 30. Pricing Screen
+
+Create a premium but non-aggressive paywall.
+
+Example:
+
+File Manager Pro
+
+"Unlock the full power of your files."
+
+Monthly
+Annual — Best Value
+
+Include:
+
+✓ Advanced PDF tools
+✓ Unlimited scanning
+✓ Smart storage cleanup
+✓ Private Vault
+✓ Cloud storage
+✓ Advanced OCR
+✓ Batch tools
+✓ No ads
+
+Use StoreKit 2.
+
+Do not hardcode subscription prices.
+
+Read products dynamically from App Store configuration.
+
+---
+
+# 31. Onboarding
+
+Create a short onboarding flow.
+
+Screen 1:
+
+"Your files. Finally simple."
+
+Screen 2:
+
+"Find anything in seconds."
+
+Screen 3:
+
+"Organize without the mess."
+
+Screen 4:
+
+"Powerful tools when you need them."
+
+Then request permissions only when needed.
+
+Do NOT request every permission during onboarding.
+
+Use contextual permission requests.
+
+---
+
+# 32. Empty States
+
+Every empty screen must have a beautiful useful empty state.
+
+Examples:
+
+"No recent files yet."
+
+"Your Favorites will appear here."
+
+"Your vault is empty."
+
+"No downloads yet."
+
+"No duplicate files found."
+
+Include:
+
+* Illustration
+* Short explanation
+* Relevant action
+
+---
+
+# 33. Animations
+
+Use subtle premium animations.
+
+Examples:
+
+* File appearing
+* Folder opening
+* Download progress
+* Scan completion
+* PDF conversion
+* Delete confirmation
+* Storage visualization
+* Tab transitions
+* Bottom sheets
+
+Animations must feel fast and purposeful.
+
+Avoid excessive animation.
+
+---
+
+# 34. Accessibility
+
+Support:
+
+* VoiceOver
+* Dynamic Type
+* Sufficient contrast
+* Large touch targets
+* Reduce Motion
+* Dark Mode
+
+Do not rely solely on color to communicate meaning.
+
+---
+
+# 35. Security
+
+Follow Apple's security best practices.
+
+Use:
+
+* Keychain
+* Face ID / Touch ID
+* Secure local storage
+* Sandboxed storage
+* Secure networking
+* Minimal permissions
+
+Never log:
+
+* Passwords
+* Tokens
+* Private file contents
+* Sensitive user data
+
+---
+
+# 36. Error Handling
+
+Every operation needs excellent error handling.
+
+Examples:
+
+File unavailable
+
+Permission denied
+
+Storage unavailable
+
+Conversion failed
+
+Cloud unavailable
+
+Network unavailable
+
+Unsupported format
+
+Insufficient storage
+
+The error UI should explain:
+
+What happened
+
+Why it happened
+
+What the user can do next
+
+Avoid technical error messages whenever possible.
+
+---
+
+# 37. Performance
+
+The app must remain fast with:
+
+* 10 files
+* 1,000 files
+* 10,000+ files
+
+Use:
+
+* Lazy loading
+* Virtualized lists
+* Thumbnail caching
+* Background processing
+* Efficient file metadata indexing
+* Debounced search
+* Pagination where appropriate
+
+Do not load every thumbnail simultaneously.
+
+---
+
+# 38. Architecture
+
+Organize the project cleanly.
+
+Suggested structure:
+
+src/
+
+components/
+
+screens/
+
+navigation/
+
+features/
+
+files/
+
+search/
+
+scanner/
+
+pdf/
+
+storage/
+
+vault/
+
+downloads/
+
+cloud/
+
+settings/
+
+services/
+
+hooks/
+
+utils/
+
+types/
+
+store/
+
+native/
+
+Use clear separation between:
+
+UI
+
+Business logic
+
+File system operations
+
+Native APIs
+
+Subscription logic
+
+Cloud providers
+
+Analytics
+
+Storage
+
+---
+
+# 39. Analytics
+
+Add privacy-conscious analytics architecture.
+
+Track product events such as:
+
+* File imported
+* File opened
+* Search performed
+* Scan completed
+* PDF tool opened
+* Subscription screen viewed
+* Subscription purchased
+
+Do not collect file contents or unnecessary personal information.
+
+Make analytics modular so the provider can be changed later.
+
+---
+
+# 40. Settings
+
+Create a beautiful settings page.
+
+Sections:
+
+Account
+
+Appearance
+
+File Management
+
+Default View
+
+Sorting
+
+Cloud Services
+
+Security
+
+Notifications
+
+Subscription
+
+Privacy
+
+Storage
+
+About
+
+Help & Support
+
+---
+
+# 41. Product Differentiators
+
+Add features that make the application feel genuinely different.
+
+## Smart Home
+
+The home screen should understand what users commonly need.
+
+## Smart Actions
+
+When a user selects files, intelligently recommend useful actions.
+
+Example:
+
+5 PDFs selected
+
+Suggested:
+
+Merge
+Compress
+Share
+Convert
+
+## File Health
+
+Show:
+
+Large
+Old
+Duplicate
+Unused
+Recently modified
+
+## Quick Command
+
+Create a universal action/search interface where users can type:
+
+"Find PDFs"
+
+"Compress these"
+
+"Show large videos"
+
+"Scan document"
+
+"Create ZIP"
+
+"Open downloads"
+
+---
+
+# 42. Visual File Intelligence
+
+Use file-type-specific visual design.
+
+Examples:
+
+PDF → red document icon
+
+Word → blue document icon
+
+Excel → green spreadsheet icon
+
+PowerPoint → orange presentation icon
+
+ZIP → archive icon
+
+Image → thumbnail
+
+Video → thumbnail + duration
+
+Audio → waveform/music icon
+
+Folder → colorful folder
+
+The UI should allow users to understand file types instantly.
+
+---
+
+# 43. iPad Experience
+
+Do not simply stretch the iPhone UI.
+
+Create an iPad-optimized layout.
+
+Use:
+
+Sidebar navigation
+
+Multi-column file browser
+
+Large preview panel
+
+Keyboard shortcuts where appropriate
+
+Drag and drop
+
+Multi-window support where feasible
+
+---
+
+# 44. Quality Requirements
+
+The application must feel:
+
+Premium
+Fast
+Reliable
+Beautiful
+Simple
+Modern
+Trustworthy
+
+Avoid:
+
+Clutter
+Tiny buttons
+Too many menus
+Unnecessary popups
+Aggressive advertisements
+Confusing terminology
+Excessive gradients
+Generic dashboard templates
+Copying Apple's UI
+
+---
+
+# 45. Development Process
+
+Build this application in phases.
+
+PHASE 1:
+Design system + navigation + Home + Files
+
+PHASE 2:
+File operations + search + preview
+
+PHASE 3:
+Scanner + OCR
+
+PHASE 4:
+PDF tools
+
+PHASE 5:
+Storage cleaner + duplicate finder
+
+PHASE 6:
+Private Vault
+
+PHASE 7:
+Cloud integrations
+
+PHASE 8:
+Subscriptions + Pro features
+
+PHASE 9:
+iPad optimization
+
+PHASE 10:
+Performance + accessibility + App Store readiness
+
+After each phase:
+
+* Run the application
+* Test every feature
+* Fix TypeScript errors
+* Fix navigation issues
+* Test iOS behavior
+* Test dark mode
+* Test accessibility
+* Do not leave placeholder functionality
+* Do not break existing functionality
+
+---
+
+# 46. Important Rule
+
+Before implementing a feature, verify whether iOS actually permits the required behavior.
+
+Do not pretend that an iOS application has unrestricted filesystem access.
+
+Use Apple's supported APIs and design the UX around Apple's sandbox and privacy model.
+
+If a requested feature is impossible or restricted on iOS:
+
+1. Explain the limitation internally.
+2. Find the closest Apple-supported implementation.
+3. Build the best possible UX around that implementation.
+
+---
+
+# 47. Final Product Goal
+
+The final application should feel like:
+
+**A beautiful combination of**
+
+File Manager
++
+Document Scanner
++
+PDF Toolkit
++
+Storage Cleaner
++
+Private Vault
++
+Cloud Manager
++
+Smart File Assistant
+
+But the experience must remain simple.
+
+The user should open the application and immediately understand:
+
+"Where are my files?"
+
+"What should I do?"
+
+"What can this app help me with?"
+
+The interface should answer those questions without requiring a tutorial.
+
+Build it as a **real production-quality React Native iOS application**, not a visual mockup.
