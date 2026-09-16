@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
 export type SheetOption = {
@@ -18,19 +19,20 @@ type ActionSheetProps = {
 
 export function ActionSheet({ visible, title, message, options, onClose }: ActionSheetProps) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} />
-        <View style={[styles.sheet, { backgroundColor: colors.card }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 12) + 78 }]}>
           <Text style={[styles.title, { color: colors.foreground }]}>{title}</Text>
           {message ? <Text style={[styles.message, { color: colors.mutedForeground }]}>{message}</Text> : null}
           {options.map((option) => (
             <Pressable
               key={option.label}
               onPress={() => {
-                onClose();
                 option.onPress();
+                onClose();
               }}
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
@@ -51,7 +53,7 @@ export function ActionSheet({ visible, title, message, options, onClose }: Actio
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { backgroundColor: 'rgba(16,36,61,0.38)' },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32 },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 17, letterSpacing: -0.2 },
   message: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 6, marginBottom: 8 },
   row: { minHeight: 52, justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#DEE7E0' },

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import type { LibraryItem } from '@/context/FileManagerContext';
 
@@ -13,11 +14,12 @@ type FolderPickerModalProps = {
 
 export function FolderPickerModal({ visible, folders, onClose, onSelect }: FolderPickerModalProps) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} />
-        <View style={[styles.sheet, { backgroundColor: colors.card }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 12) + 78 }]}>
           <Text style={[styles.title, { color: colors.foreground }]}>Move to</Text>
           <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
             <Pressable onPress={() => onSelect(null)} style={styles.row}>
@@ -47,7 +49,7 @@ export function FolderPickerModal({ visible, folders, onClose, onSelect }: Folde
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { backgroundColor: 'rgba(16,36,61,0.38)' },
-  sheet: { maxHeight: '70%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32 },
+  sheet: { maxHeight: '70%', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 17, marginBottom: 8 },
   list: { maxHeight: 320 },
   row: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 },

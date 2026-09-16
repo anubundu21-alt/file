@@ -52,6 +52,7 @@ export function PromptModal({
             placeholder={placeholder}
             placeholderTextColor={colors.mutedForeground}
             autoFocus
+            accessibilityLabel={placeholder || title}
             style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
             returnKeyType="done"
             onSubmitEditing={() => onSubmit(value.trim())}
