@@ -1,31 +1,34 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { useFileManager } from '@/context/FileManagerContext';
 
 type IconName = React.ComponentProps<typeof Feather>['name'];
-const settingsGroups: { title: string; items: { label: string; detail?: string; icon: IconName; color: string; toggle?: boolean }[] }[] = [
+const settingsGroups: { title: string; items: { label: string; detail?: string; icon: IconName; color: string; toggle?: boolean; route?: string }[] }[] = [
+  { title: 'File management', items: [
+    { label: 'Recently Deleted', detail: 'Restore or remove forever', icon: 'trash-2', color: '#F28A72', route: '/trash' },
+    { label: 'Default view', detail: 'Grid or list, saved on Files', icon: 'grid', color: '#77B7F2', route: '/(tabs)/files' },
+  ] },
   { title: 'Preferences', items: [
-    { label: 'Appearance', detail: 'System', icon: 'sun', color: '#F5C75D' },
-    { label: 'Default view', detail: 'Grid', icon: 'grid', color: '#77B7F2' },
+    { label: 'Appearance', detail: 'Follows iPhone settings', icon: 'sun', color: '#F5C75D' },
     { label: 'Notifications', detail: 'On', icon: 'bell', color: '#F28A72', toggle: true },
   ] },
-  { title: 'Privacy & security', items: [
-    { label: 'Private vault', detail: 'Set up', icon: 'lock', color: '#9B8AFB' },
-    { label: 'Face ID', detail: 'Off', icon: 'shield', color: '#65C59A', toggle: true },
+  { title: 'Coming later', items: [
+    { label: 'Private vault', detail: 'Face ID lock for private files', icon: 'lock', color: '#9B8AFB' },
   ] },
   { title: 'About Sift', items: [
     { label: 'Help & support', icon: 'help-circle', color: '#77B7F2' },
-    { label: 'Privacy policy', icon: 'file-text', color: '#A7B5AC' },
   ] },
 ];
 
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { trashedItems } = useFileManager();
   const [notifications, setNotifications] = useState(true);
-  const [faceId, setFaceId] = useState(false);
   return (
     <ScrollView style={[styles.screen, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingTop: insets.top + 18, paddingHorizontal: 20, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
@@ -43,17 +46,24 @@ export default function SettingsScreen() {
           <Text style={[styles.groupTitle, { color: colors.mutedForeground }]}>{group.title}</Text>
           <View style={[styles.card, { backgroundColor: colors.card }]}>
             {group.items.map((item, index) => {
-              const toggleValue = item.label === 'Notifications' ? notifications : faceId;
-              const onToggle = item.label === 'Notifications' ? setNotifications : setFaceId;
+              const detail = item.label === 'Recently Deleted'
+                ? `${trashedItems.length} ${trashedItems.length === 1 ? 'item' : 'items'}`
+                : item.detail;
               return (
                 <React.Fragment key={item.label}>
-                  <Pressable style={styles.row}>
+                  <Pressable
+                    style={styles.row}
+                    onPress={() => {
+                      if (item.route === '/trash') router.push('/trash');
+                      if (item.route === '/(tabs)/files') router.push('/(tabs)/files');
+                    }}
+                  >
                     <View style={[styles.itemIcon, { backgroundColor: `${item.color}22` }]}><Feather name={item.icon} color={item.color} size={17} /></View>
                     <View style={styles.itemCopy}>
                       <Text style={[styles.itemLabel, { color: colors.foreground }]}>{item.label}</Text>
-                      {item.detail ? <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>{item.detail}</Text> : null}
+                      {detail ? <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>{detail}</Text> : null}
                     </View>
-                    {item.toggle ? <Switch value={toggleValue} onValueChange={onToggle} trackColor={{ false: colors.secondary, true: colors.teal }} thumbColor="#FFFFFF" /> : <Feather name="chevron-right" color={colors.mutedForeground} size={18} />}
+                    {item.toggle ? <Switch value={notifications} onValueChange={setNotifications} trackColor={{ false: colors.secondary, true: colors.teal }} thumbColor="#FFFFFF" /> : <Feather name="chevron-right" color={colors.mutedForeground} size={18} />}
                   </Pressable>
                   {index < group.items.length - 1 ? <View style={[styles.divider, { backgroundColor: colors.border }]} /> : null}
                 </React.Fragment>

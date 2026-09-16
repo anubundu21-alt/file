@@ -1,7 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Alert,
-  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,96 +9,35 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { categoryMeta, formatFileSize, useFileManager } from '@/context/FileManagerContext';
+import { categoryMeta, formatFileSize, LibraryItem, useFileManager } from '@/context/FileManagerContext';
 import { useColors } from '@/hooks/useColors';
+import { FileGlyph } from '@/components/FileGlyph';
+import { PromptModal } from '@/components/PromptModal';
+import { formatRelativeTime } from '@/lib/filePresentation';
 
 type IconName = React.ComponentProps<typeof Feather>['name'];
-
-type RecentFile = {
-  id: string;
-  name: string;
-  type: string;
-  size: string;
-  time: string;
-  icon: IconName;
-  color: string;
-  favorite?: boolean;
-};
 
 function Icon({ name, color, size = 18 }: { name: IconName; color: string; size?: number }) {
   return <Feather name={name} size={size} color={color} />;
 }
 
-function SectionHeading({ title, action, onPress }: { title: string; action?: string; onPress?: () => void }) {
+function SectionHeading({ title, action, onPress, color, actionColor }: {
+  title: string;
+  action?: string;
+  onPress?: () => void;
+  color: string;
+  actionColor: string;
+}) {
   return (
     <View style={styles.sectionHeading}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={[styles.sectionTitle, { color }]}>{title}</Text>
       {action ? (
         <Pressable onPress={onPress} hitSlop={10}>
-          <Text style={styles.sectionAction}>{action}</Text>
+          <Text style={[styles.sectionAction, { color: actionColor }]}>{action}</Text>
         </Pressable>
       ) : null}
-    </View>
-  );
-}
-
-function StorageCard({ colors, totalBytes, fileCount }: { colors: ReturnType<typeof useColors>; totalBytes: number; fileCount: number }) {
-  const managedPercent = Math.max(5, Math.min(100, (totalBytes / (1024 * 1024 * 1024)) * 100));
-  return (
-    <View style={[styles.storageCard, { backgroundColor: colors.navy }]}>
-      <View style={styles.storageHeader}>
-        <View>
-          <Text style={styles.storageEyebrow}>SIFT STORAGE</Text>
-          <Text style={styles.storageTotal}>{totalBytes ? formatFileSize(totalBytes) : '0 MB'} <Text style={styles.storageUnit}>saved locally</Text></Text>
-        </View>
-        <View style={styles.storageRing}>
-          <Text style={styles.storageRingText}>{fileCount}</Text>
-        </View>
-      </View>
-      <View style={styles.storageBar}>
-        <View style={[styles.storageBarSegment, { width: `${managedPercent}%`, backgroundColor: colors.teal }]} />
-      </View>
-      <View style={styles.storageFooter}>
-        <Text style={styles.storageCapacity}>{fileCount} {fileCount === 1 ? 'file' : 'files'} managed</Text>
-        <View style={styles.legendRow}>
-          <View style={[styles.legendDot, { backgroundColor: colors.teal }]} />
-          <Text style={styles.legendText}>Auto-organized</Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function QuickAction({ icon, label, color, onPress }: { icon: IconName; label: string; color: string; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <View style={[styles.quickIcon, { backgroundColor: color }]}>
-        <Icon name={icon} color="#10243D" size={18} />
-      </View>
-      <Text style={styles.quickLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function RecentRow({ file, onFavorite }: { file: RecentFile; onFavorite: () => void }) {
-  return (
-    <View style={styles.recentRow}>
-      <View style={[styles.fileIcon, { backgroundColor: `${file.color}22` }]}>
-        <Icon name={file.icon} color={file.color} size={20} />
-      </View>
-      <View style={styles.recentDetails}>
-        <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
-        <Text style={styles.fileMeta}>{file.type}  ·  {file.size}  ·  {file.time}</Text>
-      </View>
-      <Pressable onPress={onFavorite} hitSlop={12} accessibilityRole="button" accessibilityLabel="Favorite file">
-        <Icon name={file.favorite ? 'star' : 'star'} color={file.favorite ? '#F5C75D' : '#A7B5AC'} size={18} />
-      </Pressable>
     </View>
   );
 }
@@ -108,148 +45,205 @@ function RecentRow({ file, onFavorite }: { file: RecentFile; onFavorite: () => v
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { files, importFiles, toggleFavorite, isImporting, isLoading, isReady } = useFileManager();
+  const { files, items, importFiles, toggleFavorite, createFolder, isImporting, isLoading, isReady, reloadLibrary } = useFileManager();
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [folderPrompt, setFolderPrompt] = useState(false);
 
   const greet = useMemo(() => {
     const hour = new Date().getHours();
     return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   }, []);
-  const totalBytes = useMemo(() => files.reduce((sum, file) => sum + file.size, 0), [files]);
-  const displayRecentFiles = useMemo<RecentFile[]>(() => files.slice(0, 3).map((file) => {
-    const meta = categoryMeta[file.category];
-    const iconByCategory: Record<typeof file.category, IconName> = {
-      pdf: 'file-text',
-      image: 'image',
-      archive: 'archive',
-      document: 'file',
-      spreadsheet: 'grid',
-      presentation: 'monitor',
-      video: 'video',
-      audio: 'headphones',
-      other: 'box',
-    };
-    return {
-      id: file.id,
-      name: file.name,
-      type: meta.label,
-      size: formatFileSize(file.size),
-      time: 'Saved',
-      icon: iconByCategory[file.category],
-      color: meta.color,
-      favorite: file.favorite,
-    };
-  }), [files]);
+  const activeFiles = files;
+  const totalBytes = useMemo(() => activeFiles.reduce((sum, file) => sum + file.size, 0), [activeFiles]);
+  const categoryBreakdown = useMemo(() => {
+    const totals: Partial<Record<LibraryItem['category'], number>> = {};
+    for (const file of activeFiles) totals[file.category] = (totals[file.category] ?? 0) + file.size;
+    return (Object.entries(totals) as [LibraryItem['category'], number][])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+  }, [activeFiles]);
+  const recentFiles = useMemo(() => [...activeFiles]
+    .sort((a, b) => new Date(b.openedAt ?? b.createdAt).getTime() - new Date(a.openedAt ?? a.createdAt).getTime())
+    .slice(0, 4), [activeFiles]);
+  const favoriteCount = items.filter((item) => item.favorite && !item.deletedAt).length;
+  const largeFiles = activeFiles.filter((file) => file.size >= 10 * 1024 * 1024);
+  const staleFiles = activeFiles.filter((file) => {
+    const stamp = new Date(file.openedAt ?? file.createdAt).getTime();
+    return Date.now() - stamp > 30 * 24 * 60 * 60 * 1000;
+  });
+  const suggestion = largeFiles.length
+    ? { title: 'Make room for what matters', text: `${largeFiles.length} large ${largeFiles.length === 1 ? 'file is' : 'files are'} taking ${formatFileSize(largeFiles.reduce((sum, file) => sum + file.size, 0))}.` }
+    : staleFiles.length
+      ? { title: 'Files you have not opened lately', text: `${staleFiles.length} ${staleFiles.length === 1 ? 'file has' : 'files have'} been idle for more than 30 days.` }
+      : favoriteCount
+        ? { title: 'Your favorites are ready', text: `${favoriteCount} starred ${favoriteCount === 1 ? 'item is' : 'items are'} waiting in Files.` }
+        : { title: 'Start your library', text: 'Import a file and Sift will keep it organized locally.' };
 
-  const handleAction = (label: string) => {
-    Haptics.selectionAsync();
-    setNotice(`${label} is ready for the next phase.`);
+  const showNotice = (message: string) => {
+    setNotice(message);
     setTimeout(() => setNotice(null), 2200);
   };
 
-  const refresh = () => {
+  const comingSoon = (label: string) => {
+    Haptics.selectionAsync();
+    showNotice(`${label} is coming in a later update.`);
+  };
+
+  const refresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 700);
+    await reloadLibrary();
+    setRefreshing(false);
   };
 
   const handleImport = async () => {
     if (!isReady || isLoading || isImporting) return;
-    const count = await importFiles();
+    const count = await importFiles(null);
     if (count > 0) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setNotice(`${count} ${count === 1 ? 'file' : 'files'} saved and organized.`);
-      setTimeout(() => setNotice(null), 2200);
+      showNotice(`${count} ${count === 1 ? 'file' : 'files'} saved and organized.`);
     }
   };
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <FlatList
-        data={[]}
-        renderItem={null}
-        scrollEnabled={false}
-        ListHeaderComponent={
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[styles.homeContent, { paddingTop: insets.top + 18, paddingBottom: 120 }]}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />}
-          >
-            <View style={styles.topLine}>
-              <View>
-                <Text style={[styles.greeting, { color: colors.foreground }]}>{greet}, Rakesh</Text>
-                <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Everything you need, right here.</Text>
-              </View>
-              <Pressable style={[styles.avatar, { backgroundColor: colors.navy }]} onPress={() => Alert.alert('Profile', 'Your local workspace is ready.')}>
-                <Text style={styles.avatarText}>R</Text>
-              </Pressable>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.homeContent, { paddingTop: insets.top + 18, paddingBottom: 120 }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={colors.primary} />}
+      >
+        <View style={styles.topLine}>
+          <View>
+            <Text style={[styles.greeting, { color: colors.foreground }]}>{greet}</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Everything you need, right here.</Text>
+          </View>
+          <View style={[styles.avatar, { backgroundColor: colors.navy }]}>
+            <Feather name="user" color="#FFFFFF" size={18} />
+          </View>
+        </View>
+
+        <View style={[styles.storageCard, { backgroundColor: colors.navy }]}>
+          <View style={styles.storageHeader}>
+            <View>
+              <Text style={styles.storageEyebrow}>SIFT LIBRARY</Text>
+              <Text style={styles.storageTotal}>{totalBytes ? formatFileSize(totalBytes) : '0 MB'} <Text style={styles.storageUnit}>saved locally</Text></Text>
             </View>
-
-            <StorageCard colors={colors} totalBytes={totalBytes} fileCount={files.length} />
-
-            <SectionHeading title="Quick actions" action="Customize" onPress={() => handleAction('Quick actions')} />
-            <View style={styles.quickGrid}>
-              <QuickAction icon="camera" label="Scan document" color="#BCEEDB" onPress={() => handleAction('Scan document')} />
-              <QuickAction icon="upload" label={isImporting ? 'Importing…' : 'Import file'} color="#CDE8FC" onPress={() => void handleImport()} />
-              <QuickAction icon="folder-plus" label="New folder" color="#FCE5AC" onPress={() => handleAction('New folder')} />
-              <QuickAction icon="archive" label="Compress" color="#E4DFFD" onPress={() => handleAction('Compress')} />
+            <View style={styles.storageRing}>
+              <Text style={styles.storageRingText}>{activeFiles.length}</Text>
             </View>
+          </View>
+          <View style={styles.storageBar}>
+            {categoryBreakdown.length ? categoryBreakdown.map(([category, size]) => (
+              <View
+                key={category}
+                style={[styles.storageBarSegment, { flex: Math.max(size, 1), backgroundColor: categoryMeta[category].color }]}
+              />
+            )) : <View style={[styles.storageBarSegment, { flex: 1, backgroundColor: colors.teal }]} />}
+          </View>
+          <View style={styles.storageFooter}>
+            <Text style={styles.storageCapacity}>{activeFiles.length} {activeFiles.length === 1 ? 'file' : 'files'} in Sift</Text>
+            <Text style={styles.legendText}>Not full iPhone storage</Text>
+          </View>
+        </View>
 
-            <SectionHeading title="Recent files" action="See all" onPress={() => handleAction('Recent files')} />
-            {displayRecentFiles.length > 0 ? (
-              <View style={styles.recentCard}>
-                {displayRecentFiles.map((file, index) => (
-                  <React.Fragment key={file.id}>
-                    <RecentRow file={file} onFavorite={() => toggleFavorite(file.id)} />
-                    {index < displayRecentFiles.length - 1 ? <View style={[styles.divider, { backgroundColor: colors.border }]} /> : null}
-                  </React.Fragment>
-                ))}
-              </View>
-            ) : (
-              <Pressable style={[styles.emptyRecent, { backgroundColor: colors.card }]} onPress={() => void handleImport()}>
-                <View style={[styles.emptyRecentIcon, { backgroundColor: colors.accent }]}>
-                  <Icon name="upload" color={colors.accentForeground} size={19} />
-                </View>
-                <View style={styles.recentDetails}>
-                  <Text style={[styles.fileName, { color: colors.foreground }]}>Import your first file</Text>
-                  <Text style={[styles.fileMeta, { color: colors.mutedForeground }]}>Sift saves it locally and organizes it automatically.</Text>
-                </View>
-                <Icon name="chevron-right" color={colors.mutedForeground} size={18} />
-              </Pressable>
-            )}
+        <SectionHeading title="Quick actions" color={colors.foreground} actionColor={colors.accentForeground} />
+        <View style={styles.quickGrid}>
+          <Pressable onPress={() => void handleImport()} style={({ pressed }) => [styles.quickAction, { backgroundColor: colors.card }, pressed && styles.pressed]}>
+            <View style={[styles.quickIcon, { backgroundColor: '#CDE8FC' }]}><Icon name="upload" color="#10243D" /></View>
+            <Text style={[styles.quickLabel, { color: colors.foreground }]}>{isImporting ? 'Importing…' : 'Import file'}</Text>
+          </Pressable>
+          <Pressable onPress={() => setFolderPrompt(true)} style={({ pressed }) => [styles.quickAction, { backgroundColor: colors.card }, pressed && styles.pressed]}>
+            <View style={[styles.quickIcon, { backgroundColor: '#FCE5AC' }]}><Icon name="folder-plus" color="#10243D" /></View>
+            <Text style={[styles.quickLabel, { color: colors.foreground }]}>New folder</Text>
+          </Pressable>
+          <Pressable onPress={() => comingSoon('Document scanning')} style={({ pressed }) => [styles.quickAction, { backgroundColor: colors.card }, pressed && styles.pressed]}>
+            <View style={[styles.quickIcon, { backgroundColor: '#BCEEDB' }]}><Icon name="camera" color="#10243D" /></View>
+            <Text style={[styles.quickLabel, { color: colors.foreground }]}>Scan later</Text>
+          </Pressable>
+          <Pressable onPress={() => router.push('/(tabs)/files')} style={({ pressed }) => [styles.quickAction, { backgroundColor: colors.card }, pressed && styles.pressed]}>
+            <View style={[styles.quickIcon, { backgroundColor: '#E4DFFD' }]}><Icon name="layers" color="#10243D" /></View>
+            <Text style={[styles.quickLabel, { color: colors.foreground }]}>Browse files</Text>
+          </Pressable>
+        </View>
 
-            <SectionHeading title="Smart suggestions" />
-            <Pressable style={({ pressed }) => [styles.suggestionCard, { backgroundColor: colors.accent }, pressed && styles.pressed]} onPress={() => handleAction('Storage cleanup')}>
-              <View style={[styles.suggestionIcon, { backgroundColor: colors.teal }]}>
-                <Icon name="star" color={colors.navy} size={18} />
-              </View>
-              <View style={styles.suggestionCopy}>
-                <Text style={[styles.suggestionTitle, { color: colors.foreground }]}>Make room for what matters</Text>
-                <Text style={[styles.suggestionText, { color: colors.inkSoft }]}>12 large files have not been opened in 6 months.</Text>
-              </View>
-              <Icon name="chevron-right" color={colors.accentForeground} size={20} />
-            </Pressable>
-          </ScrollView>
-        }
-      />
+        <SectionHeading title="Recent files" action="See all" onPress={() => router.push('/(tabs)/recent')} color={colors.foreground} actionColor={colors.accentForeground} />
+        {recentFiles.length > 0 ? (
+          <View style={[styles.recentCard, { backgroundColor: colors.card }]}>
+            {recentFiles.map((file, index) => (
+              <React.Fragment key={file.id}>
+                <Pressable onPress={() => router.push(`/preview/${file.id}`)} style={styles.recentRow}>
+                  <FileGlyph item={file} size={42} />
+                  <View style={styles.recentDetails}>
+                    <Text style={[styles.fileName, { color: colors.foreground }]} numberOfLines={1}>{file.name}</Text>
+                    <Text style={[styles.fileMeta, { color: colors.mutedForeground }]}>
+                      {categoryMeta[file.category].label}  ·  {formatFileSize(file.size)}  ·  {formatRelativeTime(file.openedAt ?? file.createdAt)}
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => toggleFavorite(file.id)} hitSlop={12} accessibilityLabel="Favorite file">
+                    <Icon name="star" color={file.favorite ? colors.sunshine : colors.mutedForeground} />
+                  </Pressable>
+                </Pressable>
+                {index < recentFiles.length - 1 ? <View style={[styles.divider, { backgroundColor: colors.border }]} /> : null}
+              </React.Fragment>
+            ))}
+          </View>
+        ) : (
+          <Pressable style={[styles.emptyRecent, { backgroundColor: colors.card }]} onPress={() => void handleImport()}>
+            <View style={[styles.emptyRecentIcon, { backgroundColor: colors.accent }]}>
+              <Icon name="upload" color={colors.accentForeground} size={19} />
+            </View>
+            <View style={styles.recentDetails}>
+              <Text style={[styles.fileName, { color: colors.foreground }]}>Import your first file</Text>
+              <Text style={[styles.fileMeta, { color: colors.mutedForeground }]}>Sift saves it locally and organizes it automatically.</Text>
+            </View>
+            <Icon name="chevron-right" color={colors.mutedForeground} size={18} />
+          </Pressable>
+        )}
+
+        <SectionHeading title="Smart suggestions" color={colors.foreground} actionColor={colors.accentForeground} />
+        <Pressable
+          style={({ pressed }) => [styles.suggestionCard, { backgroundColor: colors.accent }, pressed && styles.pressed]}
+          onPress={() => router.push('/(tabs)/files')}
+        >
+          <View style={[styles.suggestionIcon, { backgroundColor: colors.teal }]}>
+            <Icon name="star" color={colors.navy} size={18} />
+          </View>
+          <View style={styles.suggestionCopy}>
+            <Text style={[styles.suggestionTitle, { color: colors.foreground }]}>{suggestion.title}</Text>
+            <Text style={[styles.suggestionText, { color: colors.inkSoft }]}>{suggestion.text}</Text>
+          </View>
+          <Icon name="chevron-right" color={colors.accentForeground} size={20} />
+        </Pressable>
+      </ScrollView>
       {notice ? (
         <View style={[styles.notice, { backgroundColor: colors.navy }]}>
           <Icon name="check-circle" color={colors.teal} size={18} />
           <Text style={styles.noticeText}>{notice}</Text>
         </View>
       ) : null}
+      <PromptModal
+        visible={folderPrompt}
+        title="New folder"
+        placeholder="Folder name"
+        confirmLabel="Create"
+        onCancel={() => setFolderPrompt(false)}
+        onSubmit={(value) => {
+          void createFolder(value, null);
+          setFolderPrompt(false);
+          showNotice('Folder created.');
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  homeContent: { paddingHorizontal: 20, gap: 0 },
+  homeContent: { paddingHorizontal: 20 },
   topLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   greeting: { fontFamily: 'Inter_700Bold', fontSize: 28, letterSpacing: -0.8 },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, marginTop: 5 },
   avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#FFFFFF', fontFamily: 'Inter_700Bold', fontSize: 16 },
   storageCard: { borderRadius: 26, padding: 22, marginBottom: 28, shadowColor: '#10243D', shadowOpacity: 0.15, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 4 },
   storageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   storageEyebrow: { color: '#9DB2A8', fontFamily: 'Inter_600SemiBold', letterSpacing: 1.4, fontSize: 10 },
@@ -258,27 +252,24 @@ const styles = StyleSheet.create({
   storageRing: { width: 58, height: 58, borderRadius: 29, borderWidth: 5, borderColor: '#19C88A', borderLeftColor: '#385169', alignItems: 'center', justifyContent: 'center' },
   storageRingText: { color: '#FFFFFF', fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   storageBar: { height: 10, backgroundColor: '#263F56', borderRadius: 5, marginTop: 22, flexDirection: 'row', overflow: 'hidden', gap: 2 },
-  storageBarSegment: { height: '100%' },
+  storageBarSegment: { height: '100%', minWidth: 8 },
   storageFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
   storageCapacity: { color: '#9DB2A8', fontFamily: 'Inter_400Regular', fontSize: 12 },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 6, height: 6, borderRadius: 3, marginLeft: 7 },
   legendText: { color: '#B6C8BE', fontFamily: 'Inter_500Medium', fontSize: 10 },
   sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 13, marginTop: 2 },
-  sectionTitle: { color: '#10243D', fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.25 },
-  sectionAction: { color: '#087B54', fontFamily: 'Inter_600SemiBold', fontSize: 12 },
+  sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.25 },
+  sectionAction: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 28 },
-  quickAction: { width: '48.3%', backgroundColor: '#FFFFFF', borderRadius: 18, padding: 14, minHeight: 94, justifyContent: 'space-between', shadowColor: '#10243D', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
+  quickAction: { width: '48.3%', borderRadius: 18, padding: 14, minHeight: 94, justifyContent: 'space-between', shadowColor: '#10243D', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
   quickIcon: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  quickLabel: { color: '#10243D', fontFamily: 'Inter_600SemiBold', fontSize: 13 },
-  recentCard: { backgroundColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: 15, marginBottom: 28, shadowColor: '#10243D', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
+  quickLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  recentCard: { borderRadius: 20, paddingHorizontal: 15, marginBottom: 28, shadowColor: '#10243D', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
   emptyRecent: { minHeight: 82, borderRadius: 20, paddingHorizontal: 15, marginBottom: 28, flexDirection: 'row', alignItems: 'center', gap: 12 },
   emptyRecentIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   recentRow: { flexDirection: 'row', alignItems: 'center', minHeight: 76, gap: 12 },
-  fileIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   recentDetails: { flex: 1, gap: 4 },
-  fileName: { color: '#10243D', fontFamily: 'Inter_600SemiBold', fontSize: 13 },
-  fileMeta: { color: '#6C7A74', fontFamily: 'Inter_400Regular', fontSize: 10.5 },
+  fileName: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  fileMeta: { fontFamily: 'Inter_400Regular', fontSize: 10.5 },
   divider: { height: 1, marginLeft: 54 },
   suggestionCard: { borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
   suggestionIcon: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },

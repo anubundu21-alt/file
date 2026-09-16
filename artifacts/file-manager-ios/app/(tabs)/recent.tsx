@@ -1,36 +1,20 @@
 import React, { useMemo } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  categoryMeta,
-  FileCategory,
-  formatFileSize,
-  useFileManager,
-} from '@/context/FileManagerContext';
+import { categoryMeta, formatFileSize, useFileManager } from '@/context/FileManagerContext';
 import { useColors } from '@/hooks/useColors';
-
-type IconName = React.ComponentProps<typeof Feather>['name'];
-
-const categoryIcons: Record<FileCategory, IconName> = {
-  pdf: 'file-text',
-  image: 'image',
-  archive: 'archive',
-  document: 'file',
-  spreadsheet: 'grid',
-  presentation: 'monitor',
-  video: 'video',
-  audio: 'headphones',
-  other: 'box',
-};
+import { FileGlyph } from '@/components/FileGlyph';
+import { formatRelativeTime } from '@/lib/filePresentation';
 
 export default function RecentScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { files, isLoading, importFiles } = useFileManager();
   const recentFiles = useMemo(() => [...files]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 20), [files]);
+    .sort((a, b) => new Date(b.openedAt ?? b.createdAt).getTime() - new Date(a.openedAt ?? a.createdAt).getTime())
+    .slice(0, 30), [files]);
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -41,27 +25,22 @@ export default function RecentScreen() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.header}>
-            <View>
-              <Text style={[styles.title, { color: colors.foreground }]}>Recent</Text>
-              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your newest files, ready to continue.</Text>
-            </View>
+            <Text style={[styles.title, { color: colors.foreground }]}>Recent</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Opened and imported files, newest first.</Text>
           </View>
         }
-        renderItem={({ item }) => {
-          const meta = categoryMeta[item.category];
-          return (
-            <Pressable style={({ pressed }) => [styles.row, { backgroundColor: colors.card }, pressed && styles.pressed]}>
-              <View style={[styles.icon, { backgroundColor: `${meta.color}22` }]}>
-                <Feather name={categoryIcons[item.category]} color={meta.color} size={20} />
-              </View>
-              <View style={styles.copy}>
-                <Text style={[styles.fileName, { color: colors.foreground }]} numberOfLines={1}>{item.name}</Text>
-                <Text style={[styles.meta, { color: colors.mutedForeground }]}>{meta.label}  ·  {formatFileSize(item.size)}</Text>
-              </View>
-              <Feather name="chevron-right" color={colors.mutedForeground} size={18} />
-            </Pressable>
-          );
-        }}
+        renderItem={({ item }) => (
+          <Pressable onPress={() => router.push(`/preview/${item.id}`)} style={({ pressed }) => [styles.row, { backgroundColor: colors.card }, pressed && styles.pressed]}>
+            <FileGlyph item={item} size={40} />
+            <View style={styles.copy}>
+              <Text style={[styles.fileName, { color: colors.foreground }]} numberOfLines={1}>{item.name}</Text>
+              <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                {categoryMeta[item.category].label}  ·  {formatFileSize(item.size)}  ·  {formatRelativeTime(item.openedAt ?? item.createdAt)}
+              </Text>
+            </View>
+            <Feather name="chevron-right" color={colors.mutedForeground} size={18} />
+          </Pressable>
+        )}
         ListEmptyComponent={
           isLoading ? (
             <ActivityIndicator color={colors.primary} size="large" />
@@ -71,8 +50,8 @@ export default function RecentScreen() {
                 <Feather name="clock" color={colors.accentForeground} size={28} />
               </View>
               <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No recent files yet</Text>
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Files you import into Sift will appear here automatically.</Text>
-              <Pressable onPress={() => void importFiles()} style={({ pressed }) => [styles.importButton, { backgroundColor: colors.navy }, pressed && styles.pressed]}>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Files you import or open in Sift will appear here.</Text>
+              <Pressable onPress={() => void importFiles(null)} style={({ pressed }) => [styles.importButton, { backgroundColor: colors.navy }, pressed && styles.pressed]}>
                 <Feather name="upload" color={colors.white} size={16} />
                 <Text style={styles.importButtonText}>Import a file</Text>
               </Pressable>
@@ -90,7 +69,6 @@ const styles = StyleSheet.create({
   title: { fontFamily: 'Inter_700Bold', fontSize: 30, letterSpacing: -0.8 },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 5 },
   row: { minHeight: 72, borderRadius: 17, marginBottom: 9, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 11 },
-  icon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   copy: { flex: 1, gap: 4 },
   fileName: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   meta: { fontFamily: 'Inter_400Regular', fontSize: 10.5 },

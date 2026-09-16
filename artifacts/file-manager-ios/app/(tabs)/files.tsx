@@ -12,34 +12,24 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  categoryMeta,
-  FileCategory,
-  formatFileSize,
-  StoredFile,
-  useFileManager,
-} from '@/context/FileManagerContext';
+import { FileCategory, formatFileSize, LibraryItem, useFileManager } from '@/context/FileManagerContext';
 import { useColors } from '@/hooks/useColors';
+import { ActionSheet } from '@/components/ActionSheet';
+import { FileGlyph } from '@/components/FileGlyph';
+import { FolderPickerModal } from '@/components/FolderPickerModal';
+import { PromptModal } from '@/components/PromptModal';
+import { SelectionBar } from '@/components/SelectionBar';
+import { formatRelativeTime } from '@/lib/filePresentation';
 
 type IconName = React.ComponentProps<typeof Feather>['name'];
 type ViewMode = 'grid' | 'list';
 type Filter = FileCategory | 'all';
-
-const categoryIcons: Record<FileCategory, IconName> = {
-  pdf: 'file-text',
-  image: 'image',
-  archive: 'archive',
-  document: 'file',
-  spreadsheet: 'grid',
-  presentation: 'monitor',
-  video: 'video',
-  audio: 'headphones',
-  other: 'box',
-};
+type SortBy = 'Recent' | 'Name' | 'Size';
 
 const filters: { label: string; value: Filter; icon: IconName }[] = [
-  { label: 'All Files', value: 'all', icon: 'layers' },
+  { label: 'All', value: 'all', icon: 'layers' },
   { label: 'PDF', value: 'pdf', icon: 'file-text' },
   { label: 'Images', value: 'image', icon: 'image' },
   { label: 'ZIP', value: 'archive', icon: 'archive' },
@@ -51,68 +41,74 @@ const filters: { label: string; value: Filter; icon: IconName }[] = [
   { label: 'Other', value: 'other', icon: 'box' },
 ];
 
-function dateLabel(value: string): string {
-  const date = new Date(value);
-  const today = new Date();
-  if (date.toDateString() === today.toDateString()) return 'Today';
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
 function FileTile({
-  file,
+  item,
   mode,
+  selected,
+  selecting,
+  subtitle,
+  onPress,
+  onLongPress,
   onFavorite,
-  onDelete,
+  onMore,
 }: {
-  file: StoredFile;
+  item: LibraryItem;
   mode: ViewMode;
+  selected: boolean;
+  selecting: boolean;
+  subtitle: string;
+  onPress: () => void;
+  onLongPress: () => void;
   onFavorite: () => void;
-  onDelete: () => void;
+  onMore: () => void;
 }) {
   const colors = useColors();
-  const meta = categoryMeta[file.category];
-  const icon = categoryIcons[file.category];
-  const detail = `${formatFileSize(file.size)}  ·  ${dateLabel(file.createdAt)}`;
-
-  const showOptions = () => {
-    Alert.alert(file.name, `${meta.label} · ${formatFileSize(file.size)}`, [
-      { text: file.favorite ? 'Remove favorite' : 'Add to favorites', onPress: onFavorite },
-      { text: 'Delete from Sift', style: 'destructive', onPress: onDelete },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
+  const selectedStyle = selected ? { borderWidth: 2, borderColor: colors.teal } : null;
 
   if (mode === 'list') {
     return (
-      <Pressable onPress={showOptions} style={({ pressed }) => [styles.listItem, { backgroundColor: colors.card }, pressed && styles.pressed]}>
-        <View style={[styles.listFileIcon, { backgroundColor: `${meta.color}22` }]}>
-          <Feather name={icon} color={meta.color} size={20} />
-        </View>
+      <Pressable onPress={onPress} onLongPress={onLongPress} style={({ pressed }) => [styles.listItem, { backgroundColor: colors.card }, selectedStyle, pressed && styles.pressed]}>
+        <FileGlyph item={item} size={40} />
         <View style={styles.listCopy}>
-          <Text style={[styles.itemName, { color: colors.foreground }]} numberOfLines={1}>{file.name}</Text>
-          <Text style={[styles.itemMeta, { color: colors.mutedForeground }]}>{meta.label}  ·  {detail}</Text>
+          <Text style={[styles.itemName, { color: colors.foreground }]} numberOfLines={1}>{item.name}</Text>
+          <Text style={[styles.itemMeta, { color: colors.mutedForeground }]}>{subtitle}</Text>
         </View>
-        <Pressable onPress={onFavorite} hitSlop={12}>
-          <Feather name="star" color={file.favorite ? colors.sunshine : colors.mutedForeground} size={17} />
-        </Pressable>
-        <Feather name="more-horizontal" color={colors.mutedForeground} size={18} />
+        {selecting ? (
+          <Feather name={selected ? 'check-circle' : 'circle'} color={selected ? colors.teal : colors.mutedForeground} size={20} />
+        ) : (
+          <>
+            <Pressable onPress={onFavorite} hitSlop={12} accessibilityLabel={item.favorite ? 'Remove favorite' : 'Add favorite'}>
+              <Feather name={item.favorite ? 'star' : 'star'} color={item.favorite ? colors.sunshine : colors.mutedForeground} size={17} />
+            </Pressable>
+            <Pressable onPress={onMore} hitSlop={12} accessibilityLabel="More actions">
+              <Feather name="more-horizontal" color={colors.mutedForeground} size={18} />
+            </Pressable>
+          </>
+        )}
       </Pressable>
     );
   }
 
   return (
-    <Pressable onPress={showOptions} style={({ pressed }) => [styles.gridTile, { backgroundColor: colors.card }, pressed && styles.pressed]}>
+    <Pressable onPress={onPress} onLongPress={onLongPress} style={({ pressed }) => [styles.gridTile, { backgroundColor: colors.card }, selectedStyle, pressed && styles.pressed]}>
       <View style={styles.gridTop}>
-        <View style={[styles.gridFileIcon, { backgroundColor: `${meta.color}22` }]}>
-          <Feather name={icon} color={meta.color} size={22} />
-        </View>
-        <Pressable onPress={onFavorite} hitSlop={10}>
-          <Feather name="star" color={file.favorite ? colors.sunshine : colors.mutedForeground} size={16} />
-        </Pressable>
+        <FileGlyph item={item} size={42} />
+        {selecting ? (
+          <Feather name={selected ? 'check-circle' : 'circle'} color={selected ? colors.teal : colors.mutedForeground} size={18} />
+        ) : (
+          <View style={styles.gridActions}>
+            <Pressable onPress={onFavorite} hitSlop={8} accessibilityLabel={item.favorite ? 'Remove favorite' : 'Add favorite'}>
+              <Feather name="star" color={item.favorite ? colors.sunshine : colors.mutedForeground} size={16} />
+            </Pressable>
+            <Pressable onPress={onMore} hitSlop={8} accessibilityLabel="More actions">
+              <Feather name="more-horizontal" color={colors.mutedForeground} size={16} />
+            </Pressable>
+          </View>
+        )}
       </View>
       <View>
-        <Text style={[styles.itemName, { color: colors.foreground }]} numberOfLines={2}>{file.name}</Text>
-        <Text style={[styles.itemMeta, { color: colors.mutedForeground }]}>{detail}</Text>
+        <Text style={[styles.itemName, { color: colors.foreground }]} numberOfLines={2}>{item.name}</Text>
+        <Text style={[styles.itemMeta, { color: colors.mutedForeground }]}>{subtitle}</Text>
       </View>
     </Pressable>
   );
@@ -121,11 +117,38 @@ function FileTile({
 export default function FilesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { files, isLoading, isReady, isImporting, error, importFiles, toggleFavorite, removeFile, reloadLibrary, clearError } = useFileManager();
+  const {
+    items,
+    isLoading,
+    isReady,
+    isImporting,
+    error,
+    importFiles,
+    createFolder,
+    renameItem,
+    moveItems,
+    duplicateItem,
+    toggleFavorite,
+    trashItems,
+    shareItems,
+    markOpened,
+    reloadLibrary,
+    clearError,
+    breadcrumbsFor,
+    pathLabelFor,
+    folderOptions,
+  } = useFileManager();
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
-  const [sortBy, setSortBy] = useState<'Recent' | 'Name'>('Recent');
+  const [sortBy, setSortBy] = useState<SortBy>('Recent');
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [sheetItem, setSheetItem] = useState<LibraryItem | null>(null);
+  const [prompt, setPrompt] = useState<{ mode: 'folder' | 'rename'; item?: LibraryItem } | null>(null);
+  const [movingIds, setMovingIds] = useState<string[] | null>(null);
+
+  const selecting = selectedIds.length > 0;
 
   useEffect(() => {
     AsyncStorage.getItem('sift-view-mode').then((value) => {
@@ -134,9 +157,18 @@ export default function FilesScreen() {
   }, []);
 
   useEffect(() => {
+    if (!folderId) return;
+    const current = items.find((item) => item.id === folderId);
+    if (!current || current.kind !== 'folder' || current.deletedAt) {
+      setFolderId(null);
+      setSelectedIds([]);
+    }
+  }, [folderId, items]);
+
+  useEffect(() => {
     if (!error) return;
     Alert.alert(
-      isReady ? 'Import failed' : 'Library unavailable',
+      isReady ? 'Something went wrong' : 'Library unavailable',
       error,
       isReady
         ? [{ text: 'OK', onPress: clearError }]
@@ -144,77 +176,140 @@ export default function FilesScreen() {
     );
   }, [clearError, error, isReady, reloadLibrary]);
 
+  const breadcrumbs = useMemo(() => breadcrumbsFor(folderId), [breadcrumbsFor, folderId, items]);
+  const searching = query.trim().length > 0;
+
+  const visibleItems = useMemo(() => {
+    const haystack = items.filter((item) => {
+      if (item.deletedAt) return false;
+      if (searching) return item.name.toLowerCase().includes(query.trim().toLowerCase());
+      return item.parentId === folderId;
+    }).filter((item) => filter === 'all' || item.kind === 'folder' || item.category === filter);
+
+    return [...haystack].sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
+      if (sortBy === 'Name') return a.name.localeCompare(b.name);
+      if (sortBy === 'Size') return b.size - a.size;
+      const aTime = new Date(a.openedAt ?? a.modifiedAt).getTime();
+      const bTime = new Date(b.openedAt ?? b.modifiedAt).getTime();
+      return bTime - aTime;
+    });
+  }, [filter, folderId, items, query, searching, sortBy]);
+
   const changeView = (next: ViewMode) => {
     setViewMode(next);
     void AsyncStorage.setItem('sift-view-mode', next);
     void Haptics.selectionAsync();
   };
 
-  const visibleFiles = useMemo(() => {
-    const filtered = files.filter((file) => {
-      const matchesQuery = file.name.toLowerCase().includes(query.toLowerCase());
-      const matchesFilter = filter === 'all' || file.category === filter;
-      return matchesQuery && matchesFilter;
-    });
-    return [...filtered].sort((a, b) => sortBy === 'Name'
-      ? a.name.localeCompare(b.name)
-      : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [files, filter, query, sortBy]);
-
   const importNow = async () => {
-    const count = await importFiles();
+    const count = await importFiles(folderId);
     if (count > 0) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Saved to Sift', `${count} ${count === 1 ? 'file was' : 'files were'} saved and organized automatically.`);
     }
+  };
+
+  const openItem = (item: LibraryItem) => {
+    if (selecting) {
+      setSelectedIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]);
+      return;
+    }
+    if (item.kind === 'folder') {
+      void markOpened(item.id);
+      setQuery('');
+      setFolderId(item.id);
+      return;
+    }
+    router.push(`/preview/${item.id}`);
+  };
+
+  const cycleSort = () => {
+    setSortBy((current) => current === 'Recent' ? 'Name' : current === 'Name' ? 'Size' : 'Recent');
   };
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <FlatList
-        key={viewMode}
-        data={visibleFiles}
+        key={`${viewMode}-${folderId ?? 'root'}`}
+        data={visibleItems}
         numColumns={viewMode === 'grid' ? 2 : 1}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <FileTile
-            file={item}
+            item={item}
             mode={viewMode}
+            selected={selectedIds.includes(item.id)}
+            selecting={selecting}
+            subtitle={searching
+              ? `${item.kind === 'folder' ? 'Folder' : formatFileSize(item.size)}  ·  ${pathLabelFor(item)}`
+              : item.kind === 'folder'
+                ? 'Folder'
+                : `${formatFileSize(item.size)}  ·  ${formatRelativeTime(item.modifiedAt)}`}
+            onPress={() => openItem(item)}
+            onLongPress={() => {
+              void Haptics.selectionAsync();
+              setSelectedIds((current) => current.includes(item.id) ? current : [...current, item.id]);
+            }}
             onFavorite={() => toggleFavorite(item.id)}
-            onDelete={() => void removeFile(item.id)}
+            onMore={() => setSheetItem(item)}
           />
         )}
         columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
-        contentContainerStyle={[styles.filesContent, { paddingTop: insets.top + 18, paddingBottom: 120 }, visibleFiles.length === 0 && styles.emptyList]}
+        contentContainerStyle={[styles.filesContent, { paddingTop: insets.top + 18, paddingBottom: selecting ? 180 : 120 }, visibleItems.length === 0 && styles.emptyList]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View>
             <View style={styles.headerRow}>
-              <View>
-                <Text style={[styles.pageTitle, { color: colors.foreground }]}>Files</Text>
-                <Text style={[styles.pageSubtitle, { color: colors.mutedForeground }]}>Saved in Sift  ·  {files.length} {files.length === 1 ? 'item' : 'items'}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.pageTitle, { color: colors.foreground }]}>{folderId ? breadcrumbs.at(-1)?.name ?? 'Files' : 'Files'}</Text>
+                <Text style={[styles.pageSubtitle, { color: colors.mutedForeground }]}>
+                  {selecting ? `${selectedIds.length} selected` : `${visibleItems.length} ${visibleItems.length === 1 ? 'item' : 'items'}`}
+                </Text>
               </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Import files"
-                disabled={isImporting || isLoading || !isReady}
-                style={({ pressed }) => [styles.addButton, { backgroundColor: colors.navy }, pressed && styles.pressed]}
-                onPress={() => void importNow()}
-              >
-                {isImporting || isLoading ? <ActivityIndicator color={colors.white} size="small" /> : <Feather name="plus" color={colors.white} size={20} />}
-              </Pressable>
+              {selecting ? (
+                <Pressable onPress={() => setSelectedIds([])} style={[styles.headerChip, { backgroundColor: colors.secondary }]}>
+                  <Text style={[styles.headerChipText, { color: colors.foreground }]}>Cancel</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.headerActions}>
+                  <Pressable onPress={() => setPrompt({ mode: 'folder' })} style={[styles.iconButton, { backgroundColor: colors.card, borderColor: colors.border }]} accessibilityLabel="New folder">
+                    <Feather name="folder-plus" color={colors.foreground} size={18} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Import files"
+                    disabled={isImporting || isLoading || !isReady}
+                    style={({ pressed }) => [styles.addButton, { backgroundColor: colors.navy }, pressed && styles.pressed]}
+                    onPress={() => void importNow()}
+                  >
+                    {isImporting || isLoading ? <ActivityIndicator color={colors.white} size="small" /> : <Feather name="plus" color={colors.white} size={20} />}
+                  </Pressable>
+                </View>
+              )}
             </View>
+            {breadcrumbs.length > 0 && !searching ? (
+              <View style={styles.crumbs}>
+                <Pressable onPress={() => setFolderId(null)}><Text style={[styles.crumb, { color: colors.accentForeground }]}>Files</Text></Pressable>
+                {breadcrumbs.map((crumb) => (
+                  <View key={crumb.id} style={styles.crumbRow}>
+                    <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
+                    <Pressable onPress={() => setFolderId(crumb.id)}>
+                      <Text style={[styles.crumb, { color: crumb.id === folderId ? colors.foreground : colors.accentForeground }]}>{crumb.name}</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             <View style={[styles.searchBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Feather name="search" color={colors.mutedForeground} size={17} />
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search your files"
+                placeholder="Search files and folders"
                 placeholderTextColor={colors.mutedForeground}
                 style={[styles.searchInput, { color: colors.foreground }]}
                 returnKeyType="search"
               />
-              <Feather name="sliders" color={colors.mutedForeground} size={17} />
             </View>
             <FlatList
               horizontal
@@ -233,9 +328,9 @@ export default function FilesScreen() {
               )}
             />
             <View style={styles.toolbar}>
-              <Text style={[styles.resultLabel, { color: colors.mutedForeground }]}>{visibleFiles.length} shown</Text>
+              <Text style={[styles.resultLabel, { color: colors.mutedForeground }]}>{searching ? 'Search results' : 'In this folder'}</Text>
               <View style={styles.toolbarActions}>
-                <Pressable onPress={() => setSortBy(sortBy === 'Recent' ? 'Name' : 'Recent')} style={styles.sortButton}>
+                <Pressable onPress={cycleSort} style={styles.sortButton}>
                   <Feather name="arrow-down" color={colors.inkSoft} size={14} />
                   <Text style={[styles.sortText, { color: colors.inkSoft }]}>{sortBy}</Text>
                 </Pressable>
@@ -259,8 +354,8 @@ export default function FilesScreen() {
               <View style={[styles.emptyIcon, { backgroundColor: colors.accent }]}>
                 <Feather name={query || filter !== 'all' ? 'search' : 'folder-plus'} color={colors.accentForeground} size={28} />
               </View>
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{query || filter !== 'all' ? 'No matching files' : 'Bring your first file into Sift'}</Text>
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{query || filter !== 'all' ? 'Try another search or category.' : 'Choose any file. Sift will save it locally and put it in the right section.'}</Text>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{query || filter !== 'all' ? 'No matching files' : 'This folder is empty'}</Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{query || filter !== 'all' ? 'Try another search or category.' : 'Import files or create a folder to start organizing.'}</Text>
               {!query && filter === 'all' ? (
                 <Pressable onPress={() => void importNow()} style={({ pressed }) => [styles.importButton, { backgroundColor: colors.navy }, pressed && styles.pressed]}>
                   <Feather name="upload" color={colors.white} size={16} />
@@ -271,6 +366,56 @@ export default function FilesScreen() {
           )
         }
       />
+      {selecting ? (
+        <SelectionBar
+          count={selectedIds.length}
+          onShare={() => void shareItems(selectedIds)}
+          onMove={() => setMovingIds(selectedIds)}
+          onFavorite={() => selectedIds.forEach((id) => toggleFavorite(id))}
+          onTrash={() => {
+            void trashItems(selectedIds);
+            setSelectedIds([]);
+          }}
+        />
+      ) : null}
+      <ActionSheet
+        visible={Boolean(sheetItem)}
+        title={sheetItem?.name ?? ''}
+        message={sheetItem ? (sheetItem.kind === 'folder' ? 'Folder' : formatFileSize(sheetItem.size)) : undefined}
+        options={sheetItem ? [
+          ...(sheetItem.kind === 'file' ? [{ label: 'Open', onPress: () => router.push(`/preview/${sheetItem.id}`) }] : [{ label: 'Open folder', onPress: () => setFolderId(sheetItem.id) }]),
+          ...(sheetItem.kind === 'file' ? [{ label: 'Share', onPress: () => void shareItems([sheetItem.id]) }] : []),
+          { label: 'Rename', onPress: () => setPrompt({ mode: 'rename', item: sheetItem }) },
+          { label: 'Move', onPress: () => setMovingIds([sheetItem.id]) },
+          ...(sheetItem.kind === 'file' ? [{ label: 'Duplicate', onPress: () => void duplicateItem(sheetItem.id) }] : []),
+          { label: sheetItem.favorite ? 'Remove favorite' : 'Add to favorites', onPress: () => toggleFavorite(sheetItem.id) },
+          { label: 'Move to Recently Deleted', destructive: true, onPress: () => void trashItems([sheetItem.id]) },
+        ] : []}
+        onClose={() => setSheetItem(null)}
+      />
+      <PromptModal
+        visible={Boolean(prompt)}
+        title={prompt?.mode === 'folder' ? 'New folder' : 'Rename'}
+        placeholder={prompt?.mode === 'folder' ? 'Folder name' : 'Name'}
+        initialValue={prompt?.mode === 'rename' ? prompt.item?.name ?? '' : ''}
+        confirmLabel={prompt?.mode === 'folder' ? 'Create' : 'Save'}
+        onCancel={() => setPrompt(null)}
+        onSubmit={(value) => {
+          if (prompt?.mode === 'folder') void createFolder(value, folderId);
+          if (prompt?.mode === 'rename' && prompt.item) void renameItem(prompt.item.id, value);
+          setPrompt(null);
+        }}
+      />
+      <FolderPickerModal
+        visible={Boolean(movingIds)}
+        folders={folderOptions(movingIds ?? [])}
+        onClose={() => setMovingIds(null)}
+        onSelect={(parentId) => {
+          if (movingIds) void moveItems(movingIds, parentId);
+          setMovingIds(null);
+          setSelectedIds([]);
+        }}
+      />
     </View>
   );
 }
@@ -279,10 +424,17 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   filesContent: { paddingHorizontal: 20 },
   emptyList: { flexGrow: 1 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerChip: { minHeight: 36, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  headerChipText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  iconButton: { width: 42, height: 42, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   pageTitle: { fontFamily: 'Inter_700Bold', fontSize: 30, letterSpacing: -0.8 },
   pageSubtitle: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 5 },
   addButton: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  crumbs: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 },
+  crumbRow: { flexDirection: 'row', alignItems: 'center' },
+  crumb: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   searchBox: { minHeight: 48, borderRadius: 15, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 14, paddingVertical: 11 },
   filters: { gap: 8, paddingVertical: 15 },
@@ -298,11 +450,10 @@ const styles = StyleSheet.create({
   gridRow: { gap: 10 },
   gridTile: { flex: 1, minHeight: 142, borderRadius: 18, padding: 14, marginBottom: 10, justifyContent: 'space-between', shadowColor: '#10243D', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
   gridTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  gridFileIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  gridActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   itemName: { fontFamily: 'Inter_600SemiBold', fontSize: 13, lineHeight: 17 },
   itemMeta: { fontFamily: 'Inter_400Regular', fontSize: 10.5, marginTop: 4 },
   listItem: { borderRadius: 16, minHeight: 70, marginBottom: 8, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 11 },
-  listFileIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   listCopy: { flex: 1 },
   pressed: { opacity: 0.78, transform: [{ scale: 0.98 }] },
   emptyState: { alignItems: 'center', paddingTop: 54, gap: 10, paddingHorizontal: 24 },

@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Linking from 'expo-linking';
+import * as Sharing from 'expo-sharing';
 
 export type FileCategory =
   | 'pdf'
@@ -25,31 +26,53 @@ export type FileCategory =
   | 'audio'
   | 'other';
 
-export type StoredFile = {
+export type LibraryItem = {
   id: string;
   name: string;
+  kind: 'file' | 'folder';
+  parentId: string | null;
   uri: string;
   size: number;
   mimeType: string | null;
   category: FileCategory;
   createdAt: string;
+  modifiedAt: string;
+  openedAt: string | null;
   favorite: boolean;
+  deletedAt: string | null;
 };
 
 type FileManagerContextValue = {
-  files: StoredFile[];
+  items: LibraryItem[];
+  files: LibraryItem[];
   isLoading: boolean;
   isReady: boolean;
   isImporting: boolean;
   error: string | null;
-  importFiles: () => Promise<number>;
+  importFiles: (parentId?: string | null) => Promise<number>;
+  createFolder: (name: string, parentId?: string | null) => Promise<LibraryItem | null>;
+  renameItem: (id: string, name: string) => Promise<void>;
+  moveItems: (ids: string[], parentId: string | null) => Promise<void>;
+  duplicateItem: (id: string) => Promise<LibraryItem | null>;
   toggleFavorite: (id: string) => void;
-  removeFile: (id: string) => Promise<void>;
+  trashItems: (ids: string[]) => Promise<void>;
+  restoreItems: (ids: string[]) => Promise<void>;
+  deleteForever: (ids: string[]) => Promise<void>;
+  emptyTrash: () => Promise<void>;
+  markOpened: (id: string) => Promise<void>;
+  shareItems: (ids: string[]) => Promise<void>;
   reloadLibrary: () => Promise<void>;
   clearError: () => void;
+  getItem: (id: string) => LibraryItem | undefined;
+  childrenOf: (parentId: string | null) => LibraryItem[];
+  breadcrumbsFor: (folderId: string | null) => LibraryItem[];
+  pathLabelFor: (item: LibraryItem) => string;
+  folderOptions: (excludeIds?: string[]) => LibraryItem[];
+  trashedItems: LibraryItem[];
 };
 
-const STORAGE_KEY = 'sift-managed-files-v1';
+const STORAGE_KEY_V1 = 'sift-managed-files-v1';
+const STORAGE_KEY = 'sift-managed-files-v2';
 const MANAGED_DIRECTORY = `${FileSystem.documentDirectory ?? ''}Sift/`;
 
 const FileManagerContext = createContext<FileManagerContextValue | null>(null);
@@ -74,6 +97,7 @@ const categoryByExtension: Record<string, FileCategory> = {
   txt: 'document',
   rtf: 'document',
   pages: 'document',
+  md: 'document',
   csv: 'spreadsheet',
   xls: 'spreadsheet',
   xlsx: 'spreadsheet',
@@ -125,52 +149,94 @@ export function formatFileSize(bytes: number): string {
 }
 
 function safeFileName(name: string): string {
-  return name.replace(/[^\w.\-() ]+/g, '_');
+  return name.replace(/[^\w.\-() ]+/g, '_').trim() || 'Untitled';
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function createId(prefix = 'item'): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isLibraryItem(value: unknown): value is LibraryItem {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<LibraryItem>;
+  return typeof item.id === 'string' && typeof item.name === 'string' && (item.kind === 'file' || item.kind === 'folder');
+}
+
+function migrateFromUnknown(raw: unknown): LibraryItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    if (isLibraryItem(entry)) {
+      return {
+        ...entry,
+        parentId: entry.parentId ?? null,
+        openedAt: entry.openedAt ?? null,
+        deletedAt: entry.deletedAt ?? null,
+        modifiedAt: entry.modifiedAt ?? entry.createdAt,
+        favorite: Boolean(entry.favorite),
+        kind: entry.kind,
+      };
+    }
+    const legacy = entry as {
+      id?: string;
+      name?: string;
+      uri?: string;
+      size?: number;
+      mimeType?: string | null;
+      category?: FileCategory;
+      createdAt?: string;
+      favorite?: boolean;
+    };
+    const name = legacy.name ?? 'Untitled file';
+    return {
+      id: legacy.id ?? createId('file'),
+      name,
+      kind: 'file' as const,
+      parentId: null,
+      uri: legacy.uri ?? '',
+      size: legacy.size ?? 0,
+      mimeType: legacy.mimeType ?? null,
+      category: legacy.category ?? classifyFile(name, legacy.mimeType),
+      createdAt: legacy.createdAt ?? nowIso(),
+      modifiedAt: legacy.createdAt ?? nowIso(),
+      openedAt: null,
+      favorite: Boolean(legacy.favorite),
+      deletedAt: null,
+    };
+  });
+}
+
+function descendantIds(items: LibraryItem[], rootIds: string[]): Set<string> {
+  const ids = new Set(rootIds);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const item of items) {
+      if (item.parentId && ids.has(item.parentId) && !ids.has(item.id)) {
+        ids.add(item.id);
+        added = true;
+      }
+    }
+  }
+  return ids;
 }
 
 export function FileManagerProvider({ children }: { children: ReactNode }) {
-  const [files, setFiles] = useState<StoredFile[]>([]);
+  const [items, setItems] = useState<LibraryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const filesRef = useRef<StoredFile[]>([]);
+  const itemsRef = useRef<LibraryItem[]>([]);
   const importingRef = useRef(false);
   const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const handledUrlsRef = useRef<Set<string>>(new Set());
 
-  const reloadLibrary = useCallback(async () => {
-    setIsLoading(true);
-    setIsReady(false);
-    setError(null);
-    try {
-      const value = await AsyncStorage.getItem(STORAGE_KEY);
-      const storedFiles = value ? JSON.parse(value) as StoredFile[] : [];
-      const reconciled = Platform.OS === 'web'
-        ? storedFiles
-        : (await Promise.all(storedFiles.map(async (file) => {
-            const info = await FileSystem.getInfoAsync(file.uri);
-            return info.exists ? file : null;
-          }))).filter((file): file is StoredFile => file !== null);
-      filesRef.current = reconciled;
-      setFiles(reconciled);
-      if (reconciled.length !== storedFiles.length) {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(reconciled));
-      }
-      setIsReady(true);
-    } catch {
-      setError('Your saved file library could not be loaded. Sift has kept file actions locked to protect your existing library.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void reloadLibrary();
-  }, [reloadLibrary]);
-
-  const persist = useCallback(async (nextFiles: StoredFile[]) => {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextFiles));
+  const persist = useCallback(async (nextItems: LibraryItem[]) => {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextItems));
   }, []);
 
   const enqueue = useCallback(<T,>(operation: () => Promise<T>): Promise<T> => {
@@ -179,13 +245,52 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     return result;
   }, []);
 
-  const commit = useCallback(async (nextFiles: StoredFile[]) => {
-    await persist(nextFiles);
-    filesRef.current = nextFiles;
-    setFiles(nextFiles);
+  const commit = useCallback(async (nextItems: LibraryItem[]) => {
+    await persist(nextItems);
+    itemsRef.current = nextItems;
+    setItems(nextItems);
   }, [persist]);
 
-  const importFiles = useCallback(async () => {
+  const reloadLibrary = useCallback(async () => {
+    setIsLoading(true);
+    setIsReady(false);
+    setError(null);
+    try {
+      const current = await AsyncStorage.getItem(STORAGE_KEY);
+      const legacy = current ? null : await AsyncStorage.getItem(STORAGE_KEY_V1);
+      const storedItems = migrateFromUnknown(JSON.parse((current ?? legacy) || '[]'));
+      const reconciled = Platform.OS === 'web'
+        ? storedItems
+        : (await Promise.all(storedItems.map(async (item) => {
+            if (item.kind === 'folder' || !item.uri) return item;
+            const info = await FileSystem.getInfoAsync(item.uri);
+            return info.exists || item.deletedAt ? item : null;
+          }))).filter((item): item is LibraryItem => item !== null);
+      itemsRef.current = reconciled;
+      setItems(reconciled);
+      await persist(reconciled);
+      if (legacy && !current) await AsyncStorage.removeItem(STORAGE_KEY_V1);
+      setIsReady(true);
+    } catch {
+      setError('Your saved file library could not be loaded. Sift has kept file actions locked to protect your existing library.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [persist]);
+
+  useEffect(() => {
+    void reloadLibrary();
+  }, [reloadLibrary]);
+
+  const ensureManagedDirectory = useCallback(async () => {
+    if (Platform.OS === 'web') return;
+    const directoryInfo = await FileSystem.getInfoAsync(MANAGED_DIRECTORY);
+    if (!directoryInfo.exists) {
+      await FileSystem.makeDirectoryAsync(MANAGED_DIRECTORY, { intermediates: true });
+    }
+  }, []);
+
+  const importFiles = useCallback(async (parentId: string | null = null) => {
     if (!isReady || isLoading || importingRef.current) return 0;
     importingRef.current = true;
     setError(null);
@@ -199,16 +304,12 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
       });
       if (result.canceled) return 0;
 
-      if (Platform.OS !== 'web') {
-        const directoryInfo = await FileSystem.getInfoAsync(MANAGED_DIRECTORY);
-        if (!directoryInfo.exists) {
-          await FileSystem.makeDirectoryAsync(MANAGED_DIRECTORY, { intermediates: true });
-        }
-      }
+      await ensureManagedDirectory();
 
-      const imported: StoredFile[] = [];
+      const imported: LibraryItem[] = [];
+      const createdAt = nowIso();
       for (const [index, asset] of result.assets.entries()) {
-        const id = `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`;
+        const id = createId(`file-${index}`);
         const destination = Platform.OS === 'web'
           ? asset.uri
           : `${MANAGED_DIRECTORY}${id}-${safeFileName(asset.name)}`;
@@ -219,17 +320,22 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
         imported.push({
           id,
           name: asset.name,
+          kind: 'file',
+          parentId,
           uri: destination,
           size: asset.size ?? 0,
           mimeType: asset.mimeType ?? null,
           category: classifyFile(asset.name, asset.mimeType),
-          createdAt: new Date().toISOString(),
+          createdAt,
+          modifiedAt: createdAt,
+          openedAt: null,
           favorite: false,
+          deletedAt: null,
         });
       }
 
       await enqueue(async () => {
-        await commit([...imported, ...filesRef.current]);
+        await commit([...imported, ...itemsRef.current]);
       });
       return imported.length;
     } catch {
@@ -242,40 +348,43 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
       importingRef.current = false;
       setIsImporting(false);
     }
-  }, [commit, enqueue, isLoading, isReady]);
+  }, [commit, enqueue, ensureManagedDirectory, isLoading, isReady]);
 
   const importExternalUri = useCallback(async (uri: string) => {
     if (!isReady || isLoading || Platform.OS === 'web' || !uri.startsWith('file://') || handledUrlsRef.current.has(uri)) return;
     handledUrlsRef.current.add(uri);
     const rawName = uri.split('?')[0]?.split('/').pop() ?? 'Imported file';
     const name = decodeURIComponent(rawName);
-    const id = `${Date.now()}-external-${Math.random().toString(36).slice(2, 8)}`;
+    const id = createId('external');
     const destination = `${MANAGED_DIRECTORY}${id}-${safeFileName(name)}`;
     try {
-      const directoryInfo = await FileSystem.getInfoAsync(MANAGED_DIRECTORY);
-      if (!directoryInfo.exists) {
-        await FileSystem.makeDirectoryAsync(MANAGED_DIRECTORY, { intermediates: true });
-      }
+      await ensureManagedDirectory();
       const sourceInfo = await FileSystem.getInfoAsync(uri);
       await FileSystem.copyAsync({ from: uri, to: destination });
-      const imported: StoredFile = {
+      const createdAt = nowIso();
+      const imported: LibraryItem = {
         id,
         name,
+        kind: 'file',
+        parentId: null,
         uri: destination,
         size: sourceInfo.exists && 'size' in sourceInfo ? sourceInfo.size : 0,
         mimeType: null,
         category: classifyFile(name),
-        createdAt: new Date().toISOString(),
+        createdAt,
+        modifiedAt: createdAt,
+        openedAt: createdAt,
         favorite: false,
+        deletedAt: null,
       };
       await enqueue(async () => {
-        await commit([imported, ...filesRef.current]);
+        await commit([imported, ...itemsRef.current]);
       });
     } catch {
       await FileSystem.deleteAsync(destination, { idempotent: true }).catch(() => undefined);
       setError('Sift could not save the file opened from another app.');
     }
-  }, [commit, enqueue, isLoading, isReady]);
+  }, [commit, enqueue, ensureManagedDirectory, isLoading, isReady]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -288,40 +397,266 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     return () => subscription.remove();
   }, [importExternalUri, isLoading]);
 
-  const toggleFavorite = useCallback((id: string) => {
-    void enqueue(async () => {
-      const next = filesRef.current.map((file) => file.id === id ? { ...file, favorite: !file.favorite } : file);
+  const createFolder = useCallback(async (name: string, parentId: string | null = null) => {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const createdAt = nowIso();
+    const folder: LibraryItem = {
+      id: createId('folder'),
+      name: trimmed,
+      kind: 'folder',
+      parentId,
+      uri: '',
+      size: 0,
+      mimeType: null,
+      category: 'other',
+      createdAt,
+      modifiedAt: createdAt,
+      openedAt: createdAt,
+      favorite: false,
+      deletedAt: null,
+    };
+    await enqueue(async () => {
+      await commit([folder, ...itemsRef.current]);
+    });
+    return folder;
+  }, [commit, enqueue]);
+
+  const renameItem = useCallback(async (id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    await enqueue(async () => {
+      const next = itemsRef.current.map((item) => (
+        item.id === id ? { ...item, name: trimmed, modifiedAt: nowIso() } : item
+      ));
       await commit(next);
     });
   }, [commit, enqueue]);
 
-  const removeFile = useCallback(async (id: string) => {
+  const moveItems = useCallback(async (ids: string[], parentId: string | null) => {
     await enqueue(async () => {
-      const file = filesRef.current.find((item) => item.id === id);
-      if (!file) return;
-      const next = filesRef.current.filter((item) => item.id !== id);
+      const blocked = descendantIds(itemsRef.current, ids);
+      if (parentId && blocked.has(parentId)) return;
+      const next = itemsRef.current.map((item) => (
+        ids.includes(item.id) ? { ...item, parentId, modifiedAt: nowIso() } : item
+      ));
+      await commit(next);
+    });
+  }, [commit, enqueue]);
+
+  const duplicateItem = useCallback(async (id: string) => {
+    const source = itemsRef.current.find((item) => item.id === id && item.kind === 'file' && !item.deletedAt);
+    if (!source) return null;
+    const copyId = createId('copy');
+    const destination = Platform.OS === 'web' || !source.uri
+      ? source.uri
+      : `${MANAGED_DIRECTORY}${copyId}-${safeFileName(source.name)}`;
+    try {
+      if (Platform.OS !== 'web' && source.uri) {
+        await ensureManagedDirectory();
+        await FileSystem.copyAsync({ from: source.uri, to: destination });
+      }
+      const createdAt = nowIso();
+      const copy: LibraryItem = {
+        ...source,
+        id: copyId,
+        name: source.name.replace(/(\.[^.]+)?$/, (ext) => ` copy${ext}`),
+        uri: destination,
+        createdAt,
+        modifiedAt: createdAt,
+        openedAt: null,
+        favorite: false,
+        deletedAt: null,
+      };
+      await enqueue(async () => {
+        await commit([copy, ...itemsRef.current]);
+      });
+      return copy;
+    } catch {
+      setError('Sift could not duplicate that file.');
+      return null;
+    }
+  }, [commit, enqueue, ensureManagedDirectory]);
+
+  const toggleFavorite = useCallback((id: string) => {
+    void enqueue(async () => {
+      const next = itemsRef.current.map((item) => (
+        item.id === id ? { ...item, favorite: !item.favorite, modifiedAt: nowIso() } : item
+      ));
+      await commit(next);
+    });
+  }, [commit, enqueue]);
+
+  const trashItems = useCallback(async (ids: string[]) => {
+    await enqueue(async () => {
+      const allIds = descendantIds(itemsRef.current, ids);
+      const deletedAt = nowIso();
+      const next = itemsRef.current.map((item) => (
+        allIds.has(item.id) && !item.deletedAt ? { ...item, deletedAt, modifiedAt: deletedAt } : item
+      ));
+      await commit(next);
+    });
+  }, [commit, enqueue]);
+
+  const restoreItems = useCallback(async (ids: string[]) => {
+    await enqueue(async () => {
+      const allIds = descendantIds(itemsRef.current, ids);
+      const next = itemsRef.current.map((item) => {
+        if (!allIds.has(item.id)) return item;
+        const parent = item.parentId ? itemsRef.current.find((candidate) => candidate.id === item.parentId) : null;
+        const parentStillGone = Boolean(
+          item.parentId && (!parent || (parent.deletedAt && !allIds.has(parent.id))),
+        );
+        return { ...item, deletedAt: null, parentId: parentStillGone ? null : item.parentId, modifiedAt: nowIso() };
+      });
+      await commit(next);
+    });
+  }, [commit, enqueue]);
+
+  const deleteForever = useCallback(async (ids: string[]) => {
+    await enqueue(async () => {
+      const allIds = descendantIds(itemsRef.current, ids);
+      const removed = itemsRef.current.filter((item) => allIds.has(item.id));
+      const next = itemsRef.current.filter((item) => !allIds.has(item.id));
       await persist(next);
       if (Platform.OS !== 'web') {
-        const info = await FileSystem.getInfoAsync(file.uri);
-        if (info.exists) await FileSystem.deleteAsync(file.uri, { idempotent: true });
+        await Promise.all(removed.map(async (item) => {
+          if (item.kind !== 'file' || !item.uri) return;
+          await FileSystem.deleteAsync(item.uri, { idempotent: true }).catch(() => undefined);
+        }));
       }
-      filesRef.current = next;
-      setFiles(next);
+      itemsRef.current = next;
+      setItems(next);
     });
   }, [enqueue, persist]);
 
+  const emptyTrash = useCallback(async () => {
+    const trashed = itemsRef.current.filter((item) => item.deletedAt).map((item) => item.id);
+    if (trashed.length) await deleteForever(trashed);
+  }, [deleteForever]);
+
+  const markOpened = useCallback(async (id: string) => {
+    await enqueue(async () => {
+      const openedAt = nowIso();
+      const next = itemsRef.current.map((item) => (
+        item.id === id ? { ...item, openedAt, modifiedAt: item.kind === 'folder' ? openedAt : item.modifiedAt } : item
+      ));
+      await commit(next);
+    });
+  }, [commit, enqueue]);
+
+  const shareItems = useCallback(async (ids: string[]) => {
+    const shareable = itemsRef.current.filter((item) => ids.includes(item.id) && item.kind === 'file' && item.uri && !item.deletedAt);
+    if (!shareable.length) {
+      setError('There is no file to share yet.');
+      return;
+    }
+    try {
+      if (Platform.OS === 'web') {
+        setError('Sharing is available in the iOS app.');
+        return;
+      }
+      const available = await Sharing.isAvailableAsync();
+      if (!available) {
+        setError('Sharing is not available on this device.');
+        return;
+      }
+      await Sharing.shareAsync(shareable[0].uri, {
+        mimeType: shareable[0].mimeType ?? undefined,
+        dialogTitle: shareable[0].name,
+      });
+    } catch {
+      setError('Sift could not share that file.');
+    }
+  }, []);
+
+  const getItem = useCallback((id: string) => items.find((item) => item.id === id), [items]);
+
+  const childrenOf = useCallback((parentId: string | null) => (
+    items.filter((item) => item.parentId === parentId && !item.deletedAt)
+  ), [items]);
+
+  const breadcrumbsFor = useCallback((folderId: string | null) => {
+    const crumbs: LibraryItem[] = [];
+    const byId = new Map(items.map((item) => [item.id, item]));
+    let current = folderId;
+    while (current) {
+      const folder = byId.get(current);
+      if (!folder) break;
+      crumbs.unshift(folder);
+      current = folder.parentId;
+    }
+    return crumbs;
+  }, [items]);
+
+  const pathLabelFor = useCallback((item: LibraryItem) => {
+    const crumbs = breadcrumbsFor(item.parentId);
+    if (!crumbs.length) return 'Files';
+    return ['Files', ...crumbs.map((folder) => folder.name)].join(' / ');
+  }, [breadcrumbsFor]);
+
+  const folderOptions = useCallback((excludeIds: string[] = []) => {
+    const blocked = descendantIds(items, excludeIds);
+    return items.filter((item) => item.kind === 'folder' && !item.deletedAt && !blocked.has(item.id));
+  }, [items]);
+
+  const files = useMemo(() => items.filter((item) => item.kind === 'file' && !item.deletedAt), [items]);
+  const trashedItems = useMemo(() => items.filter((item) => item.deletedAt), [items]);
+
   const value = useMemo<FileManagerContextValue>(() => ({
+    items,
     files,
     isLoading,
     isReady,
     isImporting,
     error,
     importFiles,
+    createFolder,
+    renameItem,
+    moveItems,
+    duplicateItem,
     toggleFavorite,
-    removeFile,
+    trashItems,
+    restoreItems,
+    deleteForever,
+    emptyTrash,
+    markOpened,
+    shareItems,
     reloadLibrary,
     clearError: () => setError(null),
-  }), [error, files, importFiles, isImporting, isLoading, isReady, reloadLibrary, removeFile, toggleFavorite]);
+    getItem,
+    childrenOf,
+    breadcrumbsFor,
+    pathLabelFor,
+    folderOptions,
+    trashedItems,
+  }), [
+    breadcrumbsFor,
+    childrenOf,
+    createFolder,
+    deleteForever,
+    duplicateItem,
+    emptyTrash,
+    error,
+    files,
+    folderOptions,
+    getItem,
+    importFiles,
+    isImporting,
+    isLoading,
+    isReady,
+    items,
+    markOpened,
+    moveItems,
+    pathLabelFor,
+    reloadLibrary,
+    renameItem,
+    restoreItems,
+    shareItems,
+    toggleFavorite,
+    trashItems,
+    trashedItems,
+  ]);
 
   return <FileManagerContext.Provider value={value}>{children}</FileManagerContext.Provider>;
 }

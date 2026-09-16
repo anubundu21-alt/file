@@ -22,9 +22,11 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: 'Back', contentStyle: { backgroundColor: '#F5F7F4' } }}>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <Stack screenOptions={{ headerBackTitle: 'Back', headerShown: false, contentStyle: { backgroundColor: '#F5F7F4' } }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="preview/[id]" />
+      <Stack.Screen name="trash" />
     </Stack>
   );
 }
