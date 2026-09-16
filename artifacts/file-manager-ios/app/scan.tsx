@@ -111,7 +111,9 @@ export default function ScanScreen() {
           disabled={!pages.length || saving}
           style={[styles.primary, { backgroundColor: colors.navy, opacity: !pages.length || saving ? 0.45 : 1 }]}
         >
-          <Text style={styles.primaryText}>{saving ? 'Saving…' : `Save ${pages.length || ''} ${pages.length === 1 ? 'page' : 'pages'} to Scans`}</Text>
+          <Text style={styles.primaryText}>
+            {saving ? 'Saving…' : pages.length ? `Save ${pages.length} ${pages.length === 1 ? 'page' : 'pages'} to Scans` : 'Save to Scans'}
+          </Text>
         </Pressable>
       </View>
     </View>
