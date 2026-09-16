@@ -6,7 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AppSettingsProvider, useAppSettings } from '@/context/AppSettingsContext';
-import { FileManagerProvider } from '@/context/FileManagerContext';
+import { FileManagerProvider, useFileManager } from '@/context/FileManagerContext';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { useColors } from '@/hooks/useColors';
 import {
   Inter_400Regular,
@@ -26,6 +27,7 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   const colors = useColors();
   const { resolvedScheme } = useAppSettings();
+  const { pendingIncoming, confirmIncomingFile, dismissIncomingFile } = useFileManager();
   return (
     <>
       <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
@@ -33,9 +35,19 @@ function RootLayoutNav() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="preview/[id]" />
-        <Stack.Screen name="scan" />
         <Stack.Screen name="trash" />
       </Stack>
+      <ConfirmModal
+        visible={Boolean(pendingIncoming)}
+        title="Save to Sift?"
+        message={pendingIncoming
+          ? `${pendingIncoming.name} was shared from another app. Save a copy in Sift so it stays here.`
+          : undefined}
+        confirmLabel="Save to Sift"
+        cancelLabel="Not now"
+        onCancel={dismissIncomingFile}
+        onConfirm={() => { void confirmIncomingFile(); }}
+      />
     </>
   );
 }

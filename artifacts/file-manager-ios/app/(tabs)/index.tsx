@@ -173,9 +173,9 @@ export default function HomeScreen() {
             <View style={[styles.quickIcon, { backgroundColor: '#FCE5AC' }]}><Icon name="folder-plus" color="#10243D" /></View>
             <Text style={[styles.quickLabel, { color: colors.foreground }]}>New folder</Text>
           </Pressable>
-          <Pressable onPress={() => router.push('/scan')} style={({ pressed }) => [styles.quickAction, { backgroundColor: colors.card }, pressed && styles.pressed]}>
-            <View style={[styles.quickIcon, { backgroundColor: '#BCEEDB' }]}><Icon name="camera" color="#10243D" /></View>
-            <Text style={[styles.quickLabel, { color: colors.foreground }]}>Scan document</Text>
+          <Pressable onPress={() => router.push('/trash')} style={({ pressed }) => [styles.quickAction, { backgroundColor: colors.card }, pressed && styles.pressed]}>
+            <View style={[styles.quickIcon, { backgroundColor: '#F9D0C5' }]}><Icon name="trash-2" color="#10243D" /></View>
+            <Text style={[styles.quickLabel, { color: colors.foreground }]}>Recently deleted</Text>
           </Pressable>
           <Pressable onPress={() => router.push('/(tabs)/files')} style={({ pressed }) => [styles.quickAction, { backgroundColor: colors.card }, pressed && styles.pressed]}>
             <View style={[styles.quickIcon, { backgroundColor: '#E4DFFD' }]}><Icon name="layers" color="#10243D" /></View>

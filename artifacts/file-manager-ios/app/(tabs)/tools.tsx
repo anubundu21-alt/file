@@ -10,9 +10,7 @@ type IconName = React.ComponentProps<typeof Feather>['name'];
 
 const tools: { name: string; description: string; icon: IconName; color: string; ready?: boolean; later?: boolean }[] = [
   { name: 'Browse files', description: 'Search, folders, and file actions', icon: 'folder', color: '#CDE8FC', ready: true },
-  { name: 'Scan document', description: 'Capture pages into your Scans folder', icon: 'camera', color: '#BCEEDB', ready: true },
   { name: 'Recently deleted', description: 'Restore or remove files for good', icon: 'trash-2', color: '#E4DFFD', ready: true },
-  { name: 'PDF toolkit', description: 'Coming later — not in this version', icon: 'file-text', color: '#F9D0C5', later: true },
   { name: 'Create ZIP', description: 'Coming later — not in this version', icon: 'archive', color: '#FCE5AC', later: true },
   { name: 'Private vault', description: 'Coming later — not in this version', icon: 'lock', color: '#D1EFE8', later: true },
 ];
@@ -25,10 +23,6 @@ export default function ToolsScreen() {
     Haptics.selectionAsync();
     if (tool.name === 'Browse files') {
       router.push('/(tabs)/files');
-      return;
-    }
-    if (tool.name === 'Scan document') {
-      router.push('/scan');
       return;
     }
     if (tool.name === 'Recently deleted') {
@@ -47,14 +41,14 @@ export default function ToolsScreen() {
       <View style={styles.header}>
         <View>
           <Text style={[styles.title, { color: colors.foreground }]}>Tools</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>File tools first. Scan into Scans is ready.</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>File tools first. Scanner and PDF stay in other apps.</Text>
         </View>
       </View>
       <View style={[styles.feature, { backgroundColor: colors.navy }]}>
         <View style={styles.featureCopy}>
           <Text style={styles.featureEyebrow}>READY NOW</Text>
           <Text style={styles.featureTitle}>Organize files without the extra tools.</Text>
-          <Text style={styles.featureText}>Preview, share, save to Files, rename, folders, scanning, and Recently Deleted are live. ZIP and vault stay later.</Text>
+          <Text style={styles.featureText}>Preview, share, save to Files, rename, folders, and Recently Deleted are live.</Text>
           <Pressable onPress={() => openTool(tools[0])} style={[styles.featureButton, { backgroundColor: colors.teal }]}>
             <Text style={[styles.featureButtonText, { color: colors.navy }]}>Open Files</Text>
             <Feather name="arrow-up-right" color={colors.navy} size={15} />

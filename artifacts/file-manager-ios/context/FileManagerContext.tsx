@@ -49,6 +49,11 @@ export type LibraryItem = {
   deletedAt: string | null;
 };
 
+export type IncomingFile = {
+  uri: string;
+  name: string;
+};
+
 type FileManagerContextValue = {
   items: LibraryItem[];
   files: LibraryItem[];
@@ -56,6 +61,7 @@ type FileManagerContextValue = {
   isReady: boolean;
   isImporting: boolean;
   error: string | null;
+  pendingIncoming: IncomingFile | null;
   importFiles: (parentId?: string | null) => Promise<number>;
   createFolder: (name: string, parentId?: string | null) => Promise<LibraryItem | null>;
   renameItem: (id: string, name: string) => Promise<void>;
@@ -70,7 +76,8 @@ type FileManagerContextValue = {
   shareItems: (ids: string[]) => Promise<void>;
   exportItems: (ids: string[]) => Promise<void>;
   importInbox: () => Promise<number>;
-  importScans: (pages: { uri: string; name: string; mimeType?: string | null }[]) => Promise<number>;
+  confirmIncomingFile: () => Promise<void>;
+  dismissIncomingFile: () => void;
   reloadLibrary: () => Promise<void>;
   clearError: () => void;
   getItem: (id: string) => LibraryItem | undefined;
@@ -254,6 +261,7 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingIncoming, setPendingIncoming] = useState<IncomingFile | null>(null);
   const itemsRef = useRef<LibraryItem[]>([]);
   const importingRef = useRef(false);
   const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -427,9 +435,8 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     if (!isReady || isLoading || Platform.OS === 'web' || !uri.startsWith('file://')) return;
     const rawName = uri.split('?')[0]?.split('/').pop() ?? 'Imported file';
     const name = decodeURIComponent(rawName);
-    const imported = await importIncomingFile(uri, name, null);
-    if (!imported) setError('Sift could not save the file opened from another app.');
-  }, [importIncomingFile, isLoading, isReady]);
+    setPendingIncoming({ uri, name });
+  }, [isLoading, isReady]);
 
   const createFolder = useCallback(async (name: string, parentId: string | null = null) => {
     const trimmed = name.trim();
@@ -483,16 +490,18 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     return importedCount;
   }, [ensureScansFolder, importIncomingFile, isLoading, isReady]);
 
-  const importScans = useCallback(async (pages: { uri: string; name: string; mimeType?: string | null }[]) => {
-    if (!isReady || isLoading || !pages.length) return 0;
+  const confirmIncomingFile = useCallback(async () => {
+    if (!pendingIncoming) return;
+    const { uri, name } = pendingIncoming;
+    setPendingIncoming(null);
     const parentId = await ensureScansFolder();
-    let importedCount = 0;
-    for (const page of pages) {
-      const imported = await importIncomingFile(page.uri, page.name, parentId, page.mimeType ?? null);
-      if (imported) importedCount += 1;
-    }
-    return importedCount;
-  }, [ensureScansFolder, importIncomingFile, isLoading, isReady]);
+    const imported = await importIncomingFile(uri, name, parentId);
+    if (!imported) setError('Sift could not save that file.');
+  }, [ensureScansFolder, importIncomingFile, pendingIncoming]);
+
+  const dismissIncomingFile = useCallback(() => {
+    setPendingIncoming(null);
+  }, []);
 
   const handleIncomingUrl = useCallback(async (url: string) => {
     if (isSiftInboxUrl(url)) {
@@ -753,6 +762,7 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     isReady,
     isImporting,
     error,
+    pendingIncoming,
     importFiles,
     createFolder,
     renameItem,
@@ -767,7 +777,8 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     shareItems,
     exportItems,
     importInbox,
-    importScans,
+    confirmIncomingFile,
+    dismissIncomingFile,
     reloadLibrary,
     clearError: () => setError(null),
     getItem,
@@ -790,7 +801,6 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     getItem,
     importFiles,
     importInbox,
-    importScans,
     isImporting,
     isLoading,
     isReady,
@@ -798,6 +808,7 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     markOpened,
     moveItems,
     pathLabelFor,
+    pendingIncoming,
     reloadLibrary,
     renameItem,
     restoreItems,
@@ -805,6 +816,8 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     toggleFavorite,
     trashItems,
     trashedItems,
+    confirmIncomingFile,
+    dismissIncomingFile,
   ]);
 
   return <FileManagerContext.Provider value={value}>{children}</FileManagerContext.Provider>;

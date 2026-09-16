@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "File Manager iOS",
+    "name": "Sift",
     "slug": "file-manager-ios",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,10 +16,9 @@
         ]
       },
       "infoPlist": {
+        "CFBundleDisplayName": "Sift",
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": false,
-        "NSCameraUsageDescription": "Sift uses the camera to scan documents into your library.",
-        "NSPhotoLibraryUsageDescription": "Sift uses your photos when you add scan pages from the library.",
         "CFBundleDocumentTypes": [
           {
             "CFBundleTypeName": "Files",
@@ -51,14 +50,6 @@
           "imageWidth": 180,
           "resizeMode": "contain",
           "backgroundColor": "#10243D"
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "cameraPermission": "Sift uses the camera to scan documents into your library.",
-          "photosPermission": "Sift uses your photos when you add scan pages from the library.",
-          "microphonePermission": false
         }
       ],
       "expo-video",
