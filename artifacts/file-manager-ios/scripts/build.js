@@ -57,20 +57,25 @@ function stripProtocol(domain) {
 }
 
 function getDeploymentDomain() {
-  if (process.env.REPLIT_INTERNAL_APP_DOMAIN) {
-    return stripProtocol(process.env.REPLIT_INTERNAL_APP_DOMAIN);
+  if (process.env.EXPO_PUBLIC_DOMAIN) {
+    return stripProtocol(process.env.EXPO_PUBLIC_DOMAIN);
+  }
+
+  const publicDomains = (process.env.REPLIT_DOMAINS || '')
+    .split(',')
+    .map((domain) => domain.trim())
+    .filter(Boolean);
+
+  if (publicDomains.length > 0) {
+    return stripProtocol(publicDomains[0]);
   }
 
   if (process.env.REPLIT_DEV_DOMAIN) {
     return stripProtocol(process.env.REPLIT_DEV_DOMAIN);
   }
 
-  if (process.env.EXPO_PUBLIC_DOMAIN) {
-    return stripProtocol(process.env.EXPO_PUBLIC_DOMAIN);
-  }
-
   console.error(
-    'ERROR: No deployment domain found. Set REPLIT_INTERNAL_APP_DOMAIN, REPLIT_DEV_DOMAIN, or EXPO_PUBLIC_DOMAIN',
+    'ERROR: No public domain found. Set EXPO_PUBLIC_DOMAIN, REPLIT_DOMAINS, or REPLIT_DEV_DOMAIN',
   );
   process.exit(1);
 }
