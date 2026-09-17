@@ -9,6 +9,7 @@ A premium local-first iOS file manager that makes files easier to find, organize
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm --filter @workspace/file-manager-ios run preview:web` — build a phone-shareable static web bundle of the app into `artifacts/file-manager-ios/web-preview/` (host that directory anywhere, including under a sub-path)
 - Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
@@ -33,6 +34,7 @@ A premium local-first iOS file manager that makes files easier to find, organize
 - The first navigation surface uses five focused areas: Home, Files, Recent, Tools, and Settings.
 - Files defaults to a visual grid and persists the user’s grid/list preference locally.
 - Inter is loaded from the branded splash through every app screen for a polished, consistent product voice.
+- The web export is preview-only: `Platform.OS === 'web'` branches stand in for the iOS file system, so the web build exercises navigation and layout, not native file handling.
 - Imported files are copied into Sift-managed local storage and classified by extension/MIME type; iOS does not permit third-party apps to become the universal system save default.
 
 ## Product
