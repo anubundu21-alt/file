@@ -77,10 +77,8 @@ async function postJson(url: string, body: unknown): Promise<Record<string, any>
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(body),
     });
-  } catch {
-    throw new ConversionError(
-      'Could not reach the converter. Check your connection and try again.',
-    );
+  } catch (error) {
+    throw new ConversionError(`Could not reach the converter (${String(error)}).`);
   }
   const text = await response.text();
   let parsed: Record<string, any>;
@@ -121,35 +119,61 @@ export async function convert(
   }
 
   // 2. Send the file straight to the conversion service.
+  //
+  // React Native's fetch can take a { uri } in a FormData, but it hands the
+  // file off to its own networking layer and throws an opaque "Network request
+  // failed" when anything about that read goes wrong. expo-file-system streams
+  // the file from disk natively instead, which is what actually survives a real
+  // upload on a phone. The browser keeps the fetch path, where FormData works.
   onProgress?.('uploading');
-  const form = new FormData();
-  form.append('task', task);
+  let uploadStatus: number;
+  let uploadText: string;
+
   if (Platform.OS === 'web') {
+    const form = new FormData();
+    form.append('task', task);
     const blob = await (await fetch(source.uri)).blob();
     form.append('file', blob, source.name);
+    try {
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      });
+      uploadStatus = response.status;
+      uploadText = await response.text();
+    } catch (error) {
+      throw new ConversionError(`The upload did not finish (${String(error)}).`);
+    }
   } else {
-    form.append('file', {
-      uri: source.uri,
-      name: source.name,
-      type: mimeFor(source),
-    } as unknown as Blob);
+    try {
+      const response = await FileSystem.uploadAsync(uploadUrl, source.uri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'file',
+        mimeType: mimeFor(source),
+        parameters: { task },
+        headers: { authorization: `Bearer ${token}` },
+      });
+      uploadStatus = response.status;
+      uploadText = response.body;
+    } catch (error) {
+      throw new ConversionError(`The upload did not finish (${String(error)}).`);
+    }
   }
 
-  let uploadResponse: Response;
+  let uploadBody: Record<string, any> = {};
   try {
-    uploadResponse = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}` },
-      body: form,
-    });
+    uploadBody = JSON.parse(uploadText);
   } catch {
-    throw new ConversionError('The upload did not finish. Check your connection and try again.');
+    // Left empty: the status and the reply text below say what went wrong.
   }
-  const uploadBody = await uploadResponse.json().catch(() => ({}) as Record<string, any>);
   const serverFilename: string | undefined =
     uploadBody.server_filename ?? uploadBody.serverFilename;
-  if (!uploadResponse.ok || !serverFilename) {
-    throw new ConversionError('The converter did not accept that file.');
+  if (uploadStatus < 200 || uploadStatus >= 300 || !serverFilename) {
+    throw new ConversionError(
+      `The converter did not accept that file (${uploadStatus}: ${uploadText.slice(0, 120)}).`,
+    );
   }
 
   // 3. Convert.
