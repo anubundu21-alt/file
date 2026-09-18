@@ -1,0 +1,71 @@
+name: Publish to Expo Go
+
+# Publishes the app to EAS Update, which Expo hosts and serves with the
+# manifest headers Expo Go requires. The published update opens in Expo Go
+# from a permanent URL — no dev server, no tunnel, nothing running locally.
+#
+# Needs one repository secret: EXPO_TOKEN
+#   https://expo.dev/settings/access-tokens -> create token
+#   repo Settings -> Secrets and variables -> Actions -> New repository secret
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: EAS Update branch to publish to
+        required: false
+        default: main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Check the token is present
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "::error::EXPO_TOKEN secret is not set. Create one at"
+            echo "::error::https://expo.dev/settings/access-tokens and add it under"
+            echo "::error::Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Who am I
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas whoami
+
+      - name: Publish update
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas update \
+            --branch "${{ inputs.branch }}" \
+            --message "Published from GitHub Actions" \
+            --non-interactive 2>&1 | tee update.log
+
+      - name: Print the Expo Go URL
+        run: |
+          PROJECT_ID=$(node -p "require('./app.json').expo.extra.eas.projectId")
+          GROUP=$(grep -oE '[0-9a-f-]{36}' update.log | tail -1)
+          echo "=================================================="
+          echo "EXPO_GO_URL=exp://u.expo.dev/$PROJECT_ID?channel-name=${{ inputs.branch }}"
+          echo "GROUP_URL=exp://u.expo.dev/update/$GROUP"
+          echo "=================================================="
+          echo "::notice title=Expo Go URL::exp://u.expo.dev/$PROJECT_ID?channel-name=${{ inputs.branch }}"
+          echo "--- full eas update output ---"
+          cat update.log

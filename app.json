@@ -64,6 +64,12 @@
         "projectId": "8f6e68e4-69d2-4221-bf00-c93a70cf2a45"
       }
     },
-    "owner": "rakpa"
+    "owner": "rakpa",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/8f6e68e4-69d2-4221-bf00-c93a70cf2a45"
+    }
   }
 }
