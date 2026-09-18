@@ -1,0 +1,97 @@
+name: Expo Go tunnel
+
+# Runs the Expo dev server on a GitHub runner and exposes it through a
+# Cloudflare quick tunnel, so Expo Go on a phone can load the app without
+# anything running locally. The job prints the tunnel URL; open
+# `exp://<tunnel-host>` in Expo Go, or scan a QR code for it.
+#
+# The tunnel lives as long as the job, so re-run this workflow to get a new one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: How long to keep the tunnel open (max 330)
+        required: false
+        default: '120'
+
+jobs:
+  tunnel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install cloudflared
+        run: |
+          curl -fsSL -o cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared
+
+      - name: Open tunnel
+        run: |
+          ./cloudflared tunnel --no-autoupdate --url http://localhost:8081 > cloudflared.log 2>&1 &
+          for i in $(seq 1 90); do
+            URL=$(grep -ohE 'https://[a-z0-9-]+\.trycloudflare\.com' cloudflared.log | head -1)
+            if [ -n "$URL" ]; then break; fi
+            sleep 2
+          done
+          if [ -z "$URL" ]; then
+            echo "Tunnel did not come up:"; cat cloudflared.log; exit 1
+          fi
+          echo "TUNNEL_URL=$URL" >> "$GITHUB_ENV"
+          echo "TUNNEL_HOST=${URL#https://}" >> "$GITHUB_ENV"
+
+      - name: Start Expo dev server
+        run: |
+          # Point the manifest's bundle/asset URLs at the tunnel instead of localhost.
+          export EXPO_PACKAGER_PROXY_URL="$TUNNEL_URL"
+          export REACT_NATIVE_PACKAGER_HOSTNAME="$TUNNEL_HOST"
+          npx expo start --port 8081 > expo.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8081/status; then break; fi
+            sleep 2
+          done
+          curl -fsS -o /dev/null http://127.0.0.1:8081/status || { cat expo.log; exit 1; }
+
+      - name: Verify the manifest Expo Go will fetch
+        run: |
+          echo "--- response headers over the tunnel ---"
+          curl -sS -D- -o manifest.json \
+            -H 'expo-platform: ios' \
+            -H 'accept: application/expo+json,application/json' \
+            "$TUNNEL_URL" | grep -iE '^HTTP|^expo-|^content-type'
+          echo "--- manifest ---"
+          node -e "
+            const m = require('./manifest.json');
+            console.log('runtimeVersion:', m.runtimeVersion);
+            console.log('launchAsset:', m.launchAsset && m.launchAsset.url);
+            if (!m.launchAsset || !m.launchAsset.url.startsWith('https://')) {
+              throw new Error('launchAsset is not a public URL');
+            }
+          "
+          echo "--- launch asset ---"
+          curl -sS -o /dev/null -w 'bundle http=%{http_code} bytes=%{size_download}\n' \
+            "$(node -p "require('./manifest.json').launchAsset.url")"
+
+      - name: Print the Expo Go URL
+        run: |
+          echo "::notice title=Expo Go URL::exp://$TUNNEL_HOST"
+          echo "=================================================="
+          echo "EXPO_GO_URL=exp://$TUNNEL_HOST"
+          echo "=================================================="
+
+      - name: Hold the tunnel open
+        run: |
+          MINUTES=${{ inputs.minutes }}
+          echo "Holding for $MINUTES minutes. Re-run this workflow for a fresh URL."
+          sleep $(( MINUTES * 60 ))
