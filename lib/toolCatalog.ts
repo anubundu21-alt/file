@@ -34,6 +34,8 @@ export type Tool = {
   blurb: string;
   /** False when it needs an engine Expo Go does not have. */
   onDevice: boolean;
+  /** True when it runs through the hosted conversion backend. */
+  viaServer?: boolean;
   /** Why it cannot run here, for the tools that cannot. */
   needs?: string;
 };
@@ -46,8 +48,7 @@ export const tools: Tool[] = [
     ink: '#2F6FED',
     blurb: 'Turn a PDF into an editable Word document.',
     onDevice: false,
-    needs:
-      'Keeping the text and layout through this conversion needs a document engine no phone ships with, so it runs on a server.',
+    viaServer: true,
   },
   {
     id: 'word-pdf',
@@ -56,8 +57,7 @@ export const tools: Tool[] = [
     ink: '#2F6FED',
     blurb: 'Turn a DOC, DOCX, ODT or RTF into a PDF.',
     onDevice: false,
-    needs:
-      'Rendering a Word file faithfully needs a document engine no phone ships with, so it runs on a server.',
+    viaServer: true,
   },
   {
     id: 'img-pdf',
@@ -74,8 +74,7 @@ export const tools: Tool[] = [
     ink: '#7C5CFF',
     blurb: 'Make a PDF smaller without wrecking how it reads.',
     onDevice: false,
-    needs:
-      'Real compression resamples the images and fonts inside the file, which needs an engine no phone ships with.',
+    viaServer: true,
   },
   {
     id: 'merge',

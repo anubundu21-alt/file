@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useFileManager } from '@/context/FileManagerContext';
 import { toolById, type Tool } from '@/lib/toolCatalog';
+import { convert, type ConversionKind } from '@/lib/conversionService';
 import {
   addPageNumbers,
   addWatermark,
@@ -30,13 +31,17 @@ import {
   splitPdf,
 } from '@/lib/pdfTools';
 
-type Picked = { name: string; base64: string; mimeType: string | null };
+type Picked = { name: string; base64: string; mimeType: string | null; uri: string };
 type Stroke = { x: number; y: number }[];
 
 const PDF_TYPES = ['application/pdf'];
 const IMAGE_TYPES = ['image/jpeg', 'image/png'];
 
-async function pick(types: string[], multiple: boolean): Promise<Picked[]> {
+async function pick(
+  types: string[],
+  multiple: boolean,
+  withBytes = true,
+): Promise<Picked[]> {
   const result = await DocumentPicker.getDocumentAsync({
     type: types,
     multiple,
@@ -45,13 +50,33 @@ async function pick(types: string[], multiple: boolean): Promise<Picked[]> {
   if (result.canceled) return [];
   const picked: Picked[] = [];
   for (const asset of result.assets) {
-    const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-      encoding: FileSystem.EncodingType.Base64,
+    const base64 = withBytes
+      ? await FileSystem.readAsStringAsync(asset.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        })
+      : '';
+    picked.push({
+      name: asset.name,
+      base64,
+      mimeType: asset.mimeType ?? null,
+      uri: asset.uri,
     });
-    picked.push({ name: asset.name, base64, mimeType: asset.mimeType ?? null });
   }
   return picked;
 }
+
+const SERVER_KINDS: Record<string, ConversionKind> = {
+  'pdf-word': 'pdf-to-word',
+  'word-pdf': 'word-to-pdf',
+  compress: 'compress',
+};
+
+const WORD_TYPES = [
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.oasis.opendocument.text',
+  'application/rtf',
+];
 
 function baseName(name: string): string {
   return name.replace(/\.[^.]+$/, '');
@@ -62,7 +87,7 @@ export default function ToolScreen() {
   const tool = toolById(id);
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { saveGeneratedFile } = useFileManager();
+  const { saveGeneratedFile, saveFileFromUri } = useFileManager();
 
   const [files, setFiles] = useState<Picked[]>([]);
   const [busy, setBusy] = useState(false);
@@ -116,13 +141,15 @@ export default function ToolScreen() {
     setProblem(null);
   };
 
+  const serverKind = SERVER_KINDS[tool.id];
+
   const choose = async (types: string[], multiple: boolean) => {
     reset();
     try {
-      const picked = await pick(types, multiple);
+      const picked = await pick(types, multiple, !serverKind);
       if (picked.length === 0) return;
       setFiles(picked);
-      if (types === PDF_TYPES) {
+      if (types === PDF_TYPES && !serverKind) {
         const count = await pageCount(picked[0].base64);
         setPages(count);
         if (tool.id === 'split') setRanges(`1-${count}`);
@@ -143,6 +170,27 @@ export default function ToolScreen() {
     reset();
     setBusy(true);
     try {
+      if (serverKind) {
+        const result = await convert(
+          { uri: files[0].uri, name: files[0].name, mimeType: files[0].mimeType },
+          serverKind,
+          (stage) =>
+            setStatus(
+              stage === 'starting'
+                ? 'Starting…'
+                : stage === 'uploading'
+                  ? 'Uploading…'
+                  : stage === 'converting'
+                    ? 'Converting…'
+                    : 'Downloading…',
+            ),
+        );
+        const saved = await saveFileFromUri(result.uri, result.name, result.mimeType);
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setStatus(saved ? `Saved “${result.name}” to your files.` : 'Could not save the result.');
+        return;
+      }
+
       switch (tool.id) {
         case 'merge': {
           const out = await mergePdfs(files.map((file) => file.base64));
@@ -223,6 +271,7 @@ export default function ToolScreen() {
   };
 
   const needsImages = tool.id === 'img-pdf';
+  const needsWord = tool.id === 'word-pdf';
   const wantsMany = tool.id === 'merge' || needsImages;
   const canRun =
     files.length > 0 &&
@@ -247,7 +296,7 @@ export default function ToolScreen() {
           <Text style={[styles.heroText, { color: '#101D41' }]}>{tool.blurb}</Text>
         </View>
 
-        {!tool.onDevice ? (
+        {!tool.onDevice && !tool.viaServer ? (
           <View style={[styles.note, { backgroundColor: colors.card }]}>
             <Feather name="alert-circle" size={18} color={colors.mutedForeground} />
             <Text style={[styles.noteText, { color: colors.mutedForeground }]}>{tool.needs}</Text>
@@ -255,12 +304,23 @@ export default function ToolScreen() {
         ) : (
           <>
             <Pressable
-              onPress={() => choose(needsImages ? IMAGE_TYPES : PDF_TYPES, wantsMany)}
+              onPress={() =>
+                choose(
+                  needsImages ? IMAGE_TYPES : needsWord ? WORD_TYPES : PDF_TYPES,
+                  wantsMany,
+                )
+              }
               style={[styles.primary, { backgroundColor: colors.navy }]}
             >
               <Feather name="upload" size={16} color="#FFFFFF" />
               <Text style={styles.primaryText}>
-                {needsImages ? 'Choose images' : wantsMany ? 'Choose PDFs' : 'Choose a PDF'}
+                {needsImages
+                  ? 'Choose images'
+                  : needsWord
+                    ? 'Choose a document'
+                    : wantsMany
+                      ? 'Choose PDFs'
+                      : 'Choose a PDF'}
               </Text>
             </Pressable>
 

@@ -1,0 +1,105 @@
+name: Check the conversion backend
+
+# The environment these changes are written in cannot reach the conversion
+# host, so this runs a real PDF to Word job end to end — start, upload,
+# process, download — and fails if any step stops matching what the app sends.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Convert a real PDF
+        run: |
+          node --input-type=module <<'JS'
+          import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+
+          const API = 'https://pdf-palette-2.vercel.app';
+
+          const doc = await PDFDocument.create();
+          const font = await doc.embedFont(StandardFonts.Helvetica);
+          const page = doc.addPage([595, 842]);
+          page.drawText('Sift conversion check', { x: 60, y: 700, size: 24, font, color: rgb(0,0,0) });
+          page.drawText('The quick brown fox jumps over the lazy dog.', { x: 60, y: 660, size: 12, font });
+          const bytes = Buffer.from(await doc.save());
+          console.log(`source pdf: ${bytes.length} bytes`);
+
+          // 1. start
+          const startRes = await fetch(`${API}/api/ilove/start`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ kind: 'pdf-to-word', filename: 'check.pdf' }),
+          });
+          const start = await startRes.json();
+          console.log('start:', startRes.status, JSON.stringify({
+            engine: start.engine, tool: start.tool, server: start.server,
+            hasToken: !!start.token, hasTask: !!start.task, uploadUrl: start.uploadUrl, reason: start.reason,
+          }));
+          if (!startRes.ok || !start.token || !start.task || !start.uploadUrl) {
+            throw new Error('start did not return a usable job');
+          }
+
+          // 2. upload straight to the conversion service
+          const form = new FormData();
+          form.append('task', start.task);
+          form.append('file', new Blob([bytes], { type: 'application/pdf' }), 'check.pdf');
+          const upRes = await fetch(start.uploadUrl, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${start.token}` },
+            body: form,
+          });
+          const up = await upRes.json();
+          const serverFilename = up.server_filename ?? up.serverFilename;
+          console.log('upload:', upRes.status, JSON.stringify(up).slice(0, 200));
+          if (!upRes.ok || !serverFilename) throw new Error('upload did not return server_filename');
+
+          // 3. process
+          const procRes = await fetch(`${API}/api/ilove/process`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              kind: 'pdf-to-word',
+              token: start.token,
+              server: start.server,
+              task: start.task,
+              tool: start.tool ?? 'pdf-to-word',
+              files: [{ serverFilename, filename: 'check.pdf' }],
+              serverFilename,
+              filename: 'check.docx',
+            }),
+          });
+          const proc = await procRes.json();
+          console.log('process:', procRes.status, JSON.stringify({
+            engine: proc.engine, downloadUrl: proc.downloadUrl, filename: proc.filename, reason: proc.reason,
+          }));
+          const downloadUrl = proc.downloadUrl ?? proc.download_url;
+          if (!procRes.ok || !downloadUrl) throw new Error('process did not return a downloadUrl');
+
+          // 4. download
+          const dlRes = await fetch(downloadUrl, {
+            headers: { authorization: `Bearer ${proc.token ?? start.token}` },
+          });
+          const out = Buffer.from(await dlRes.arrayBuffer());
+          console.log('download:', dlRes.status, `${out.length} bytes`, dlRes.headers.get('content-type'));
+          if (!dlRes.ok || out.length === 0) throw new Error('download failed');
+
+          // A .docx is a zip: check the magic bytes so we know it converted.
+          const isZip = out[0] === 0x50 && out[1] === 0x4b;
+          console.log('looks like a .docx (zip magic):', isZip);
+          if (!isZip) throw new Error('the result is not a Word document');
+
+          console.log('\nCONVERSION BACKEND OK');
+          JS

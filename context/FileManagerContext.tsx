@@ -63,6 +63,12 @@ type FileManagerContextValue = {
   error: string | null;
   pendingIncoming: IncomingFile | null;
   importFiles: (parentId?: string | null) => Promise<number>;
+  saveFileFromUri: (
+    uri: string,
+    name: string,
+    mimeType?: string | null,
+    parentId?: string | null,
+  ) => Promise<LibraryItem | null>;
   saveGeneratedFile: (
     base64: string,
     name: string,
@@ -387,6 +393,53 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
       setIsImporting(false);
     }
   }, [commit, enqueue, ensureManagedDirectory, isLoading, isReady]);
+
+  /**
+   * Takes a file a tool already wrote to disk (a conversion downloaded from the
+   * backend) and moves it into the library, without loading it into memory.
+   */
+  const saveFileFromUri = useCallback(async (
+    uri: string,
+    name: string,
+    mimeType: string | null = null,
+    parentId: string | null = null,
+  ): Promise<LibraryItem | null> => {
+    const id = createId('tool');
+    try {
+      await ensureManagedDirectory();
+      let destination = uri;
+      let size = 0;
+      if (Platform.OS !== 'web') {
+        destination = `${MANAGED_DIRECTORY}${id}-${safeFileName(name)}`;
+        await FileSystem.copyAsync({ from: uri, to: destination });
+        const info = await FileSystem.getInfoAsync(destination);
+        size = info.exists && !info.isDirectory ? info.size ?? 0 : 0;
+      }
+      const createdAt = nowIso();
+      const item: LibraryItem = {
+        id,
+        name,
+        kind: 'file',
+        parentId,
+        uri: destination,
+        size,
+        mimeType,
+        category: classifyFile(name, mimeType),
+        createdAt,
+        modifiedAt: createdAt,
+        openedAt: null,
+        favorite: false,
+        deletedAt: null,
+      };
+      await enqueue(async () => {
+        await commit([item, ...itemsRef.current]);
+      });
+      return item;
+    } catch {
+      setError('Sift could not save that file.');
+      return null;
+    }
+  }, [commit, enqueue, ensureManagedDirectory]);
 
   /**
    * Writes bytes a tool produced into Sift's own storage and puts it in the
@@ -825,6 +878,7 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     pendingIncoming,
     importFiles,
     saveGeneratedFile,
+    saveFileFromUri,
     createFolder,
     renameItem,
     moveItems,
@@ -863,6 +917,7 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     importFiles,
     importInbox,
     saveGeneratedFile,
+    saveFileFromUri,
     isImporting,
     isLoading,
     isReady,
