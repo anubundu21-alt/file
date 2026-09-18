@@ -63,6 +63,12 @@ type FileManagerContextValue = {
   error: string | null;
   pendingIncoming: IncomingFile | null;
   importFiles: (parentId?: string | null) => Promise<number>;
+  saveGeneratedFile: (
+    base64: string,
+    name: string,
+    mimeType?: string | null,
+    parentId?: string | null,
+  ) => Promise<LibraryItem | null>;
   createFolder: (name: string, parentId?: string | null) => Promise<LibraryItem | null>;
   renameItem: (id: string, name: string) => Promise<void>;
   moveItems: (ids: string[], parentId: string | null) => Promise<void>;
@@ -381,6 +387,60 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
       setIsImporting(false);
     }
   }, [commit, enqueue, ensureManagedDirectory, isLoading, isReady]);
+
+  /**
+   * Writes bytes a tool produced into Sift's own storage and puts it in the
+   * library, so a converted or signed file lands next to everything else
+   * instead of only being shared out.
+   */
+  const saveGeneratedFile = useCallback(async (
+    base64: string,
+    name: string,
+    mimeType: string | null = null,
+    parentId: string | null = null,
+  ): Promise<LibraryItem | null> => {
+    const id = createId('tool');
+    try {
+      await ensureManagedDirectory();
+      let uri: string;
+      let size = 0;
+      if (Platform.OS === 'web') {
+        uri = `data:${mimeType ?? 'application/pdf'};base64,${base64}`;
+        size = Math.floor((base64.length * 3) / 4);
+      } else {
+        uri = `${MANAGED_DIRECTORY}${id}-${safeFileName(name)}`;
+        await FileSystem.writeAsStringAsync(uri, base64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const info = await FileSystem.getInfoAsync(uri);
+        size = info.exists && !info.isDirectory ? info.size ?? 0 : 0;
+      }
+
+      const createdAt = nowIso();
+      const item: LibraryItem = {
+        id,
+        name,
+        kind: 'file',
+        parentId,
+        uri,
+        size,
+        mimeType,
+        category: classifyFile(name, mimeType),
+        createdAt,
+        modifiedAt: createdAt,
+        openedAt: null,
+        favorite: false,
+        deletedAt: null,
+      };
+      await enqueue(async () => {
+        await commit([item, ...itemsRef.current]);
+      });
+      return item;
+    } catch {
+      setError('Sift could not save that file.');
+      return null;
+    }
+  }, [commit, enqueue, ensureManagedDirectory]);
 
   const importIncomingFile = useCallback(async (
     uri: string,
@@ -764,6 +824,7 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     error,
     pendingIncoming,
     importFiles,
+    saveGeneratedFile,
     createFolder,
     renameItem,
     moveItems,
@@ -801,6 +862,7 @@ export function FileManagerProvider({ children }: { children: ReactNode }) {
     getItem,
     importFiles,
     importInbox,
+    saveGeneratedFile,
     isImporting,
     isLoading,
     isReady,

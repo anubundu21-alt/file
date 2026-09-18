@@ -9,6 +9,7 @@ import { useColors } from '@/hooks/useColors';
 type IconName = React.ComponentProps<typeof Feather>['name'];
 
 const tools: { name: string; description: string; icon: IconName; color: string; ready?: boolean; later?: boolean }[] = [
+  { name: 'All tools', description: 'PDF, text, sign, convert and more', icon: 'grid', color: '#EDF3FF', ready: true },
   { name: 'Browse files', description: 'Search, folders, and file actions', icon: 'folder', color: '#CDE8FC', ready: true },
   { name: 'Recently deleted', description: 'Restore or remove files for good', icon: 'trash-2', color: '#E4DFFD', ready: true },
   { name: 'Create ZIP', description: 'Coming later — not in this version', icon: 'archive', color: '#FCE5AC', later: true },
@@ -21,6 +22,10 @@ export default function ToolsScreen() {
 
   const openTool = (tool: typeof tools[number]) => {
     Haptics.selectionAsync();
+    if (tool.name === 'All tools') {
+      router.push('/tools');
+      return;
+    }
     if (tool.name === 'Browse files') {
       router.push('/(tabs)/files');
       return;
@@ -49,7 +54,7 @@ export default function ToolsScreen() {
           <Text style={styles.featureEyebrow}>READY NOW</Text>
           <Text style={styles.featureTitle}>Organize files without the extra tools.</Text>
           <Text style={styles.featureText}>Preview, share, save to Files, rename, folders, and Recently Deleted are live.</Text>
-          <Pressable onPress={() => openTool(tools[0])} style={[styles.featureButton, { backgroundColor: colors.teal }]}>
+          <Pressable onPress={() => openTool(tools[1])} style={[styles.featureButton, { backgroundColor: colors.teal }]}>
             <Text style={[styles.featureButtonText, { color: colors.navy }]}>Open Files</Text>
             <Feather name="arrow-up-right" color={colors.navy} size={15} />
           </Pressable>
