@@ -1,0 +1,129 @@
+{
+  "id": "afcbbed7-0d39-41e3-bf75-00b59f47615c",
+  "createdAt": "2026-09-18T10:14:22.215Z",
+  "runtimeVersion": "exposdk:57.0.0",
+  "launchAsset": {
+    "key": "bundle-ios",
+    "contentType": "application/javascript",
+    "url": "https://raw.githubusercontent.com/anubundu21-alt/file/main/expo-go/bundle-ios.js"
+  },
+  "assets": [],
+  "metadata": {},
+  "extra": {
+    "eas": {
+      "projectId": "8f6e68e4-69d2-4221-bf00-c93a70cf2a45"
+    },
+    "expoClient": {
+      "name": "Sift",
+      "slug": "file-manager-ios",
+      "version": "1.0.0",
+      "orientation": "portrait",
+      "icon": "./assets/images/icon.png",
+      "scheme": "file-manager-ios",
+      "userInterfaceStyle": "automatic",
+      "ios": {
+        "supportsTablet": true,
+        "bundleIdentifier": "com.sift.app",
+        "entitlements": {
+          "com.apple.security.application-groups": [
+            "group.com.sift.app"
+          ]
+        },
+        "infoPlist": {
+          "CFBundleDisplayName": "Sift",
+          "UIFileSharingEnabled": true,
+          "LSSupportsOpeningDocumentsInPlace": false,
+          "CFBundleDocumentTypes": [
+            {
+              "CFBundleTypeName": "Files",
+              "CFBundleTypeRole": "Editor",
+              "LSHandlerRank": "Alternate",
+              "LSItemContentTypes": [
+                "public.data",
+                "public.content",
+                "com.adobe.pdf",
+                "public.image",
+                "public.movie",
+                "public.audio",
+                "com.pkware.zip-archive"
+              ]
+            }
+          ]
+        }
+      },
+      "android": {
+        "permissions": [
+          "android.permission.RECORD_AUDIO",
+          "android.permission.MODIFY_AUDIO_SETTINGS",
+          "android.permission.FOREGROUND_SERVICE",
+          "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        ]
+      },
+      "web": {
+        "favicon": "./assets/images/icon.png"
+      },
+      "plugins": [
+        "expo-router",
+        [
+          "expo-splash-screen",
+          {
+            "image": "./assets/images/icon.png",
+            "imageWidth": 180,
+            "resizeMode": "contain",
+            "backgroundColor": "#10243D"
+          }
+        ],
+        "expo-video",
+        "expo-audio"
+      ],
+      "experiments": {
+        "typedRoutes": true,
+        "reactCompiler": true
+      },
+      "extra": {
+        "eas": {
+          "projectId": "8f6e68e4-69d2-4221-bf00-c93a70cf2a45"
+        },
+        "router": {}
+      },
+      "owner": "rakpa",
+      "_internal": {
+        "isDebug": false,
+        "projectRoot": "/home/user/file",
+        "dynamicConfigPath": {},
+        "staticConfigPath": "/home/user/file/app.json",
+        "packageJsonPath": "/home/user/file/package.json",
+        "pluginHistory": {
+          "expo-splash-screen": {
+            "name": "expo-splash-screen",
+            "version": "57.0.9"
+          },
+          "expo-audio": {
+            "name": "expo-audio",
+            "version": "57.0.5"
+          }
+        }
+      },
+      "sdkVersion": "57.0.0",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "hostUri": "raw.githubusercontent.com/anubundu21-alt/file/main/expo-go",
+      "bundleUrl": "https://raw.githubusercontent.com/anubundu21-alt/file/main/expo-go/bundle-ios.js"
+    },
+    "expoGo": {
+      "debuggerHost": "raw.githubusercontent.com/anubundu21-alt/file/main/expo-go",
+      "developer": {
+        "tool": "expo-cli",
+        "projectRoot": "/home/user/file"
+      },
+      "packagerOpts": {
+        "dev": false
+      },
+      "mainModuleName": "node_modules/expo-router/entry"
+    },
+    "scopeKey": "@anonymous/file-manager-ios-72ac0ecf-3c71-42b9-8886-280e62a20794"
+  }
+}
