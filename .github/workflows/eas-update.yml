@@ -58,14 +58,36 @@ jobs:
             --message "Published from GitHub Actions" \
             --non-interactive 2>&1 | tee update.log
 
-      - name: Print the Expo Go URL
+      - name: Verify what Expo Go will fetch
         run: |
           PROJECT_ID=$(node -p "require('./app.json').expo.extra.eas.projectId")
-          GROUP=$(grep -oE '[0-9a-f-]{36}' update.log | tail -1)
+          GROUP=$(grep -E 'Update group ID' update.log | grep -oE '[0-9a-f-]{36}' | head -1)
+          echo "PROJECT_ID=$PROJECT_ID"
+          echo "GROUP=$GROUP"
+
+          check() {
+            echo ""
+            echo "### $1"
+            code=$(curl -sS -o body.json -w '%{http_code}' -D headers.txt --max-time 40 \
+              -H 'expo-platform: ios' \
+              -H 'expo-runtime-version: exposdk:57.0.0' \
+              -H 'expo-protocol-version: 1' \
+              -H 'expo-api-version: 1' \
+              -H 'expo-updates-environment: EXPO_GO' \
+              -H 'accept: multipart/mixed,application/expo+json,application/json' \
+              "$1") || true
+            echo "http=$code"
+            grep -iE '^expo-protocol-version|^expo-sfv-version|^content-type' headers.txt || true
+            head -c 300 body.json; echo
+          }
+
+          check "https://u.expo.dev/update/$GROUP"
+          check "https://u.expo.dev/$PROJECT_ID?channel-name=${{ inputs.branch }}"
+
+          echo ""
           echo "=================================================="
-          echo "EXPO_GO_URL=exp://u.expo.dev/$PROJECT_ID?channel-name=${{ inputs.branch }}"
-          echo "GROUP_URL=exp://u.expo.dev/update/$GROUP"
+          echo "EXPO_GO_UPDATE_URL=exp://u.expo.dev/update/$GROUP"
+          echo "EXPO_GO_CHANNEL_URL=exp://u.expo.dev/$PROJECT_ID?channel-name=${{ inputs.branch }}"
           echo "=================================================="
-          echo "::notice title=Expo Go URL::exp://u.expo.dev/$PROJECT_ID?channel-name=${{ inputs.branch }}"
           echo "--- full eas update output ---"
           cat update.log
