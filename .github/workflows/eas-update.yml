@@ -58,6 +58,18 @@ jobs:
             --message "Published from GitHub Actions" \
             --non-interactive 2>&1 | tee update.log
 
+      - name: Link a channel to the branch
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          # `eas update` creates a branch; Expo Go resolves updates through a
+          # channel, so the channel has to exist and point at that branch.
+          BRANCH="${{ inputs.branch }}"
+          eas channel:create "$BRANCH" --non-interactive \
+            || eas channel:edit "$BRANCH" --branch "$BRANCH" --non-interactive \
+            || true
+          eas channel:view "$BRANCH" --non-interactive || true
+
       - name: Verify what Expo Go will fetch
         run: |
           PROJECT_ID=$(node -p "require('./app.json').expo.extra.eas.projectId")
@@ -81,8 +93,17 @@ jobs:
             head -c 300 body.json; echo
           }
 
-          check "https://u.expo.dev/update/$GROUP"
           check "https://u.expo.dev/$PROJECT_ID?channel-name=${{ inputs.branch }}"
+          check "https://u.expo.dev/update/$GROUP"
+
+          if ! grep -qi '^expo-protocol-version' headers.txt; then
+            # headers.txt holds the last check; re-test the channel URL alone.
+            check "https://u.expo.dev/$PROJECT_ID?channel-name=${{ inputs.branch }}"
+            grep -qi '^expo-protocol-version' headers.txt || {
+              echo "::error::No Expo Go-loadable manifest yet — see the checks above."
+              exit 1
+            }
+          fi
 
           echo ""
           echo "=================================================="
