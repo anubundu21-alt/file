@@ -1,1 +1,0 @@
-- [Expo native preview validation](expo-native-preview-validation.md) — web rendering is insufficient; validate the Expo manifest and iOS launch bundle after native/config changes.

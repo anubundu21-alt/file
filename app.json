@@ -9,10 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.replit.filemanagerios",
+      "bundleIdentifier": "com.sift.app",
       "entitlements": {
         "com.apple.security.application-groups": [
-          "group.com.replit.filemanagerios"
+          "group.com.sift.app"
         ]
       },
       "infoPlist": {

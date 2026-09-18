@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import { Directory, File, Paths } from 'expo-file-system';
 
 /** Shared App Group the scanner app writes into. Expo Go cannot receive it. */
-export const SIFT_APP_GROUP = 'group.com.replit.filemanagerios';
+export const SIFT_APP_GROUP = 'group.com.sift.app';
 export const SIFT_INBOX_FOLDER = 'SiftInbox';
 export const SIFT_SCANS_FOLDER = 'Scans';
 /** Optional wake URL the scanner can open after dropping files in the inbox. */
