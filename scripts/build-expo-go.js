@@ -184,6 +184,29 @@ function rewriteManifest(manifest, copied, baseUrl) {
     manifest.extra.expoClient.hostUri = host;
     manifest.extra.expoClient.bundleUrl = `${baseUrl}/bundle-${PLATFORM}.js`;
   }
+
+  // Expo Go picks its manifest parser from the response headers, and a static
+  // host cannot send `expo-protocol-version`. Without it the classic parser can
+  // run, and that one reads `sdkVersion`/`bundleUrl` from the top level rather
+  // than `launchAsset`. Publish both shapes in one document so either parser
+  // finds what it needs.
+  const client = manifest.extra?.expoClient ?? {};
+  Object.assign(manifest, {
+    ...client,
+    bundleUrl: `${baseUrl}/bundle-${PLATFORM}.js`,
+    hostUri: host,
+    platform: PLATFORM,
+    developer: undefined,
+    packagerOpts: { dev: false, minify: true, hostType: 'url' },
+    // Keep the modern fields authoritative — Object.assign must not clobber them.
+    id: manifest.id,
+    createdAt: manifest.createdAt,
+    runtimeVersion: manifest.runtimeVersion,
+    launchAsset: manifest.launchAsset,
+    assets: manifest.assets,
+    metadata: manifest.metadata,
+    extra: manifest.extra,
+  });
   if (manifest.extra?.expoGo) {
     manifest.extra.expoGo.debuggerHost = host;
     if (manifest.extra.expoGo.packagerOpts) {
