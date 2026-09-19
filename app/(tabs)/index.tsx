@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { categoryMeta, formatFileSize, useFileManager } from '@/context/FileManagerContext';
 import { useColors } from '@/hooks/useColors';
@@ -91,6 +91,14 @@ export default function HomeScreen() {
   useEffect(() => {
     void refreshStorage();
   }, []);
+
+  // Free space moves while the app is in the background, so re-read it when
+  // Home comes back into view rather than showing a figure from last launch.
+  useFocusEffect(
+    useCallback(() => {
+      void refreshStorage();
+    }, []),
+  );
 
   const refresh = async () => {
     setRefreshing(true);

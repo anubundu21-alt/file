@@ -57,6 +57,26 @@ function pickTotal(candidates: number[], free: number): number {
   return Math.max(0, ...(withoutOverflow.length ? withoutOverflow : usable));
 }
 
+/**
+ * Splits the advertised capacity the way iPhone Storage in Settings does.
+ *
+ * A "128 GB" iPhone reports about 127.88 GB of real capacity, and Settings
+ * shows the marketed 128 GB as the total while reporting the measured space
+ * available. Deriving *free* from the marketed total instead pushed that ~120 MB
+ * gap into free space, so Sift read about 0.11 GB freer than Settings did.
+ * Keep the measured free figure and derive used, which is the one arrangement
+ * where both numbers match Settings.
+ */
+export function deriveStorage(
+  rawTotal: number,
+  rawFree: number,
+): { total: number; used: number; free: number } {
+  const total = advertisedIphoneCapacity(rawTotal);
+  const free = Math.max(0, Math.min(rawFree, total));
+  const used = Math.max(0, total - free);
+  return { total, used, free };
+}
+
 export async function readDeviceStorage(): Promise<DeviceStorage | null> {
   try {
     if (Platform.OS === 'web') {
@@ -93,10 +113,7 @@ export async function readDeviceStorage(): Promise<DeviceStorage | null> {
     const rawTotal = pickTotal([pathTotal, legacyTotal], rawFree);
     if (!rawTotal) return null;
 
-    const used = Math.max(0, rawTotal - Math.min(rawFree, rawTotal));
-    const total = advertisedIphoneCapacity(rawTotal);
-    const free = Math.max(0, total - used);
-    return { total, used, free, source: 'iphone' };
+    return { ...deriveStorage(rawTotal, rawFree), source: 'iphone' };
   } catch {
     return null;
   }
