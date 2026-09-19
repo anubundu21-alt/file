@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
+  AppState,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -99,6 +100,16 @@ export default function HomeScreen() {
       void refreshStorage();
     }, []),
   );
+
+  // And again when the app itself comes back to the front — switching from
+  // Settings to Sift to compare the two numbers is exactly when a stale
+  // reading shows up as a mismatch.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refreshStorage();
+    });
+    return () => subscription.remove();
+  }, []);
 
   const refresh = async () => {
     setRefreshing(true);
