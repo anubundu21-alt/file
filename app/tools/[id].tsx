@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,38 +32,26 @@ import {
   splitPdf,
 } from '@/lib/pdfTools';
 
-type Picked = { name: string; base64: string; mimeType: string | null; uri: string };
+type Picked = { name: string; mimeType: string | null; uri: string };
 type Stroke = { x: number; y: number }[];
 
 const PDF_TYPES = ['application/pdf'];
 const IMAGE_TYPES = ['image/jpeg', 'image/png'];
 
-async function pick(
-  types: string[],
-  multiple: boolean,
-  withBytes = true,
-): Promise<Picked[]> {
+async function pick(types: string[], multiple: boolean): Promise<Picked[]> {
   const result = await DocumentPicker.getDocumentAsync({
     type: types,
     multiple,
     copyToCacheDirectory: true,
   });
   if (result.canceled) return [];
-  const picked: Picked[] = [];
-  for (const asset of result.assets) {
-    const base64 = withBytes
-      ? await FileSystem.readAsStringAsync(asset.uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        })
-      : '';
-    picked.push({
-      name: asset.name,
-      base64,
-      mimeType: asset.mimeType ?? null,
-      uri: asset.uri,
-    });
-  }
-  return picked;
+  // Bytes are read when a tool actually needs them. Reading a large PDF here
+  // made choosing a file feel like the app had hung.
+  return result.assets.map((asset) => ({
+    name: asset.name,
+    mimeType: asset.mimeType ?? null,
+    uri: asset.uri,
+  }));
 }
 
 const SERVER_KINDS: Record<string, ConversionKind> = {
@@ -82,6 +71,16 @@ function baseName(name: string): string {
   return name.replace(/\.[^.]+$/, '');
 }
 
+async function blobToBase64(uri: string): Promise<string> {
+  const blob = await (await fetch(uri)).blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('That file could not be read.'));
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+    reader.readAsDataURL(blob);
+  });
+}
+
 export default function ToolScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const tool = toolById(id);
@@ -91,6 +90,7 @@ export default function ToolScreen() {
 
   const [files, setFiles] = useState<Picked[]>([]);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ label: string; fraction: number | null } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [pages, setPages] = useState<number | null>(null);
@@ -103,6 +103,9 @@ export default function ToolScreen() {
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const current = useRef<Stroke>([]);
   const canvas = useRef({ width: 1, height: 1 });
+  // Bytes are read once per file and kept, so running a tool twice does not
+  // re-read the whole document.
+  const bytes = useRef(new Map<string, string>());
 
   const responder = useMemo(
     () =>
@@ -139,20 +142,46 @@ export default function ToolScreen() {
   const reset = () => {
     setStatus(null);
     setProblem(null);
+    setProgress(null);
+  };
+
+  const readBytes = async (file: Picked): Promise<string> => {
+    const cached = bytes.current.get(file.uri);
+    if (cached) return cached;
+
+    // expo-file-system has no readAsStringAsync on web, where the picker hands
+    // back a blob URL instead of a path.
+    const base64 =
+      Platform.OS === 'web'
+        ? await blobToBase64(file.uri)
+        : await FileSystem.readAsStringAsync(file.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+
+    bytes.current.set(file.uri, base64);
+    return base64;
   };
 
   const serverKind = SERVER_KINDS[tool.id];
 
   const choose = async (types: string[], multiple: boolean) => {
     reset();
+    setPages(null);
     try {
-      const picked = await pick(types, multiple, !serverKind);
+      const picked = await pick(types, multiple);
       if (picked.length === 0) return;
       setFiles(picked);
-      if (types === PDF_TYPES && !serverKind) {
-        const count = await pageCount(picked[0].base64);
-        setPages(count);
-        if (tool.id === 'split') setRanges(`1-${count}`);
+
+      // Page count is only worth the read for the tools that show it, and it
+      // runs after the file is on screen so choosing stays instant.
+      if (types === PDF_TYPES && !serverKind && (tool.id === 'split' || tool.id === 'sign')) {
+        readBytes(picked[0])
+          .then(pageCount)
+          .then((count) => {
+            setPages(count);
+            if (tool.id === 'split') setRanges(`1-${count}`);
+          })
+          .catch(() => undefined);
       }
     } catch (error) {
       setProblem(error instanceof Error ? error.message : 'That file could not be read.');
@@ -174,16 +203,18 @@ export default function ToolScreen() {
         const result = await convert(
           { uri: files[0].uri, name: files[0].name, mimeType: files[0].mimeType },
           serverKind,
-          (stage) =>
-            setStatus(
-              stage === 'starting'
-                ? 'Starting…'
-                : stage === 'uploading'
-                  ? 'Uploading…'
-                  : stage === 'converting'
-                    ? 'Converting…'
-                    : 'Downloading…',
-            ),
+          (stage, fraction) =>
+            setProgress({
+              label:
+                stage === 'starting'
+                  ? 'Starting'
+                  : stage === 'uploading'
+                    ? 'Uploading'
+                    : stage === 'converting'
+                      ? 'Converting'
+                      : 'Downloading',
+              fraction,
+            }),
         );
         const saved = await saveFileFromUri(result.uri, result.name, result.mimeType);
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -193,7 +224,10 @@ export default function ToolScreen() {
 
       switch (tool.id) {
         case 'merge': {
-          const out = await mergePdfs(files.map((file) => file.base64));
+          setProgress({ label: 'Merging', fraction: null });
+          const sources = [];
+          for (const file of files) sources.push(await readBytes(file));
+          const out = await mergePdfs(sources);
           await finish(out, `${baseName(files[0].name)} merged.pdf`);
           break;
         }
@@ -209,7 +243,8 @@ export default function ToolScreen() {
           if (parsed.some((r) => !Number.isFinite(r.start) || !Number.isFinite(r.end))) {
             throw new Error('Write ranges like 1-3, 4-6.');
           }
-          const outs = await splitPdf(files[0].base64, parsed);
+          setProgress({ label: 'Splitting', fraction: null });
+          const outs = await splitPdf(await readBytes(files[0]), parsed);
           for (const [index, out] of outs.entries()) {
             await saveGeneratedFile(
               out,
@@ -222,34 +257,41 @@ export default function ToolScreen() {
           break;
         }
         case 'rotate': {
-          const out = await rotatePdf(files[0].base64, turns);
+          setProgress({ label: 'Rotating', fraction: null });
+          const out = await rotatePdf(await readBytes(files[0]), turns);
           await finish(out, `${baseName(files[0].name)} rotated.pdf`);
           break;
         }
         case 'pages': {
-          const out = await addPageNumbers(files[0].base64);
+          setProgress({ label: 'Numbering pages', fraction: null });
+          const out = await addPageNumbers(await readBytes(files[0]));
           await finish(out, `${baseName(files[0].name)} numbered.pdf`);
           break;
         }
         case 'watermark': {
-          const out = await addWatermark(files[0].base64, watermarkText);
+          setProgress({ label: 'Adding watermark', fraction: null });
+          const out = await addWatermark(await readBytes(files[0]), watermarkText);
           await finish(out, `${baseName(files[0].name)} watermarked.pdf`);
           break;
         }
         case 'img-pdf': {
-          const out = await imagesToPdf(
-            files.map((file) => ({
-              base64: file.base64,
+          setProgress({ label: 'Building PDF', fraction: null });
+          const images = [];
+          for (const file of files) {
+            images.push({
+              base64: await readBytes(file),
               mimeType: file.mimeType ?? 'image/jpeg',
-            })),
-          );
+            });
+          }
+          const out = await imagesToPdf(images);
           await finish(out, `${baseName(files[0].name)}.pdf`);
           break;
         }
         case 'sign': {
           const page = Number(signPage);
           if (!Number.isFinite(page) || page < 1) throw new Error('Pick a page number.');
-          const out = await signPdf(files[0].base64, strokes, {
+          setProgress({ label: 'Signing', fraction: null });
+          const out = await signPdf(await readBytes(files[0]), strokes, {
             page,
             x: 0.58,
             y: 0.86,
@@ -267,6 +309,7 @@ export default function ToolScreen() {
       setProblem(error instanceof Error ? error.message : 'That did not work.');
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -462,13 +505,24 @@ export default function ToolScreen() {
               style={[
                 styles.primary,
                 {
-                  backgroundColor: canRun && !busy ? colors.primary : colors.muted,
+                  // While working the button keeps a solid colour: a muted grey
+                  // with a white spinner on it read as nothing at all.
+                  backgroundColor: busy
+                    ? colors.navy
+                    : canRun
+                      ? colors.primary
+                      : colors.muted,
                   marginTop: 18,
                 },
               ]}
             >
               {busy ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <>
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text style={styles.primaryText}>
+                    {progress ? `${progress.label}…` : 'Working…'}
+                  </Text>
+                </>
               ) : (
                 <>
                   <Feather
@@ -487,10 +541,38 @@ export default function ToolScreen() {
                 </>
               )}
             </Pressable>
+
+            {busy && progress ? (
+              <View style={[styles.progress, { backgroundColor: colors.card }]}>
+                <View style={styles.progressTop}>
+                  <Text style={[styles.progressLabel, { color: colors.foreground }]}>
+                    {progress.label}…
+                  </Text>
+                  {progress.fraction !== null ? (
+                    <Text style={[styles.progressPercent, { color: colors.mutedForeground }]}>
+                      {Math.round(progress.fraction * 100)}%
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={[styles.track, { backgroundColor: colors.muted }]}>
+                  <View
+                    style={[
+                      styles.fill,
+                      {
+                        backgroundColor: colors.primary,
+                        // Nothing to measure during the server's own work, so
+                        // the bar sits at a third rather than pretending.
+                        width: `${Math.round((progress.fraction ?? 0.33) * 100)}%`,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+            ) : null}
           </>
         )}
 
-        {status ? (
+        {status && !busy ? (
           <View style={[styles.result, { backgroundColor: colors.accent }]}>
             <Feather name="check-circle" size={16} color={colors.accentForeground} />
             <Text style={[styles.resultText, { color: colors.accentForeground }]}>{status}</Text>
@@ -552,4 +634,10 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   resultText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: 'Inter_500Medium' },
+  progress: { borderRadius: 14, padding: 14, marginTop: 12, gap: 10 },
+  progressTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  progressLabel: { fontSize: 13, fontWeight: '700', fontFamily: 'Inter_700Bold' },
+  progressPercent: { fontSize: 12, fontFamily: 'Inter_500Medium' },
+  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  fill: { height: '100%', borderRadius: 3 },
 });

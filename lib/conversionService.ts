@@ -34,7 +34,10 @@ export type ConversionResult = {
   mimeType: string;
 };
 
-export type Progress = (stage: 'starting' | 'uploading' | 'converting' | 'downloading') => void;
+export type Stage = 'starting' | 'uploading' | 'converting' | 'downloading';
+
+/** `fraction` is 0..1 while bytes move, and null when there is nothing to show. */
+export type Progress = (stage: Stage, fraction: number | null) => void;
 
 const RESULT: Record<ConversionKind, { extension: string; mimeType: string }> = {
   'pdf-to-word': {
@@ -103,7 +106,7 @@ export async function convert(
   const finishedName = resultName(source.name, kind);
 
   // 1. Open a job.
-  onProgress?.('starting');
+  onProgress?.('starting', null);
   const job = await postJson(`${CONVERT_API}/api/ilove/start`, {
     kind,
     filename: source.name,
@@ -125,7 +128,7 @@ export async function convert(
   // failed" when anything about that read goes wrong. expo-file-system streams
   // the file from disk natively instead, which is what actually survives a real
   // upload on a phone. The browser keeps the fetch path, where FormData works.
-  onProgress?.('uploading');
+  onProgress?.('uploading', 0);
   let uploadStatus: number;
   let uploadText: string;
 
@@ -147,14 +150,28 @@ export async function convert(
     }
   } else {
     try {
-      const response = await FileSystem.uploadAsync(uploadUrl, source.uri, {
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        fieldName: 'file',
-        mimeType: mimeFor(source),
-        parameters: { task },
-        headers: { authorization: `Bearer ${token}` },
-      });
+      // An upload task rather than uploadAsync: same native transfer, but it
+      // reports bytes as they go, so a big file shows movement instead of a
+      // spinner that looks stuck.
+      const upload = FileSystem.createUploadTask(
+        uploadUrl,
+        source.uri,
+        {
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: 'file',
+          mimeType: mimeFor(source),
+          parameters: { task },
+          headers: { authorization: `Bearer ${token}` },
+        },
+        ({ totalBytesSent, totalBytesExpectedToSend }) => {
+          if (totalBytesExpectedToSend > 0) {
+            onProgress?.('uploading', totalBytesSent / totalBytesExpectedToSend);
+          }
+        },
+      );
+      const response = await upload.uploadAsync();
+      if (!response) throw new Error('the upload was cancelled');
       uploadStatus = response.status;
       uploadText = response.body;
     } catch (error) {
@@ -177,7 +194,7 @@ export async function convert(
   }
 
   // 3. Convert.
-  onProgress?.('converting');
+  onProgress?.('converting', null);
   const processed = await postJson(`${CONVERT_API}/api/ilove/process`, {
     kind,
     token,
@@ -197,7 +214,7 @@ export async function convert(
   }
 
   // 4. Bring the result back.
-  onProgress?.('downloading');
+  onProgress?.('downloading', 0);
   const downloadToken: string = processed.token ?? token;
   const name: string = processed.filename ?? finishedName;
   const target = `${FileSystem.cacheDirectory ?? ''}${Date.now()}-${name.replace(/[^\w.\-]+/g, '_')}`;
@@ -211,10 +228,18 @@ export async function convert(
     return { uri: URL.createObjectURL(blob), name, mimeType: RESULT[kind].mimeType };
   }
 
-  const download = await FileSystem.downloadAsync(downloadUrl, target, {
-    headers: { authorization: `Bearer ${downloadToken}` },
-  });
-  if (download.status !== 200) {
+  const resumable = FileSystem.createDownloadResumable(
+    downloadUrl,
+    target,
+    { headers: { authorization: `Bearer ${downloadToken}` } },
+    ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
+      if (totalBytesExpectedToWrite > 0) {
+        onProgress?.('downloading', totalBytesWritten / totalBytesExpectedToWrite);
+      }
+    },
+  );
+  const download = await resumable.downloadAsync();
+  if (!download || download.status !== 200) {
     throw new ConversionError('The finished file could not be downloaded.');
   }
   return { uri: download.uri, name, mimeType: RESULT[kind].mimeType };
